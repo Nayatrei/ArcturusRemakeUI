@@ -2,6 +2,7 @@ import { ModelViewer, thumbnail, resetThumbnails } from './viewer.js';
 import { marked } from './vendor/marked/lib/marked.esm.js';
 import DOMPurify from './vendor/dompurify/dist/purify.es.mjs';
 import { readJson, sourceUrl, localFilesOnly, connectionState } from './data-source.js';
+import { createComparison } from './target-comparison.js';
 
 const $=id=>document.getElementById(id);
 const categories={
@@ -18,7 +19,7 @@ const categories={
   rooms:['실내·건축 원화','ROOM CONCEPTS','원작 공간, 조립 중간본, 새 목표 원화를 구분해 비교합니다.','M3 10l9-7 9 7v11H3zm6 11v-7h6v7'],
   stages:['TA 제작 과정','PRODUCTION STAGES','원화 선택 · High/Low · UV · 베이크 · PBR · Unity의 실제 제작 기록입니다.','M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z'],
   crafted:['리메이크 모델','REMADE ASSETS','제작된 부품을 원본과 비교하고 실제 모델·편집 소스를 확인하세요.','M12 2l9 5v10l-9 5-9-5V7zm0 10v10m-9-15l9 5 9-5'],
-  buildings:['건물 재질 비교','BUILDING STUDIES','초기 건물 재질 작업을 원작과 나란히 보존했습니다.','M3 10l9-7 9 7v11H3zm6 11v-7h6v7'],
+  buildings:['건물 원화 비교','ENVIRONMENT / TARGET ART','건물의 앞뒤를 함께 보며 원작에서 목표 원화로 달라진 형태와 재질을 살펴보세요.','M3 10l9-7 9 7v11H3zm6 11v-7h6v7'],
   expressions:['표정 리메이크','EXPRESSION ART','원작의 감정을 새 원화로 이어가는 34종의 비교입니다.','M16 7a4 4 0 11-8 0 4 4 0 018 0M4 21v-3a8 8 0 0116 0v3'],
   terrainwork:['지형·길 제작','TERRAIN WORK','Heightmap · Splatmap · 도로 배치와 엔진 검토 기록을 살펴보세요.','M2 20L9 5l4 8 3-5 6 12zm5-11l2 2 2-2'],
   records:['개발·제작 일지','WORK RECORDS','당시 상태와 실제 검증 범위를 날짜별로 남긴 기록입니다.','M4 3h12l4 4v14H4zm11 0v5h5M8 12h8M8 16h8'],
@@ -31,30 +32,52 @@ let catalog=[],byId=new Map(),counts={},state={collection:'remake',category:'wor
 let current=null,requestToken=0,filterTimer,observer;
 const perPage=18;
 const viewer=new ModelViewer($('preview'),message=>$('preview-status').textContent=message);
+let gallery;
+function buildingView(offline=false){
+  const buildings=state.category==='buildings',compare=buildings&&state.view!=='materials';
+  $('building-views').hidden=!buildings;$('building-gallery').hidden=!compare;
+  document.querySelector('.inspect').hidden=compare;document.querySelector('.browse').hidden=compare;
+  document.querySelector('.searchbox').hidden=compare;
+  $('target-view').setAttribute('aria-current',compare?'page':'false');
+  $('materials-view').setAttribute('aria-current',buildings&&!compare?'page':'false');
+  if(!compare)return false;
+  $('title').textContent='원작에서, 새로운 풍경으로.';$('total').textContent='';
+  requestToken++;observer?.disconnect();viewer.clear();current=null;
+  gallery??=createComparison($('building-gallery'),{onChoose:(set,cell)=>{
+    const params=new URLSearchParams(location.hash.slice(1));params.set('set',set);params.set('cell',cell);
+    history.replaceState(null,'','#'+params);
+  }});
+  const p=new URLSearchParams(location.hash.slice(1));
+  if(offline)gallery.clear();else gallery.show(p.get('set')||'ragnie-buildings',p.get('cell'));
+  return true;
+}
 const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const size=n=>n>1048576?(n/1048576).toFixed(1)+' MB':n>1024?Math.ceil(n/1024)+' KB':n+' B';
 function urlState(replace=false){
-  const p=new URLSearchParams();for(const key of ['collection','category','item','q','group','chapter','status'])if(state[key])p.set(key,state[key]);if(state.page>1)p.set('page',state.page);
+  const p=new URLSearchParams();for(const key of ['collection','category','view','item','q','group','chapter','status'])if(state[key])p.set(key,state[key]);if(state.page>1)p.set('page',state.page);
   const hash='#'+p.toString();if(replace)history.replaceState(null,'',hash);else if(location.hash!==hash)location.hash=hash;
 }
 function readRoute(){const p=new URLSearchParams(location.hash.slice(1));if(p.has('document')){state={collection:'original',category:'docs',status:'',q:'',group:'',chapter:'',page:1,item:''};renderCategory();return openDocument(p.get('document'));}
   const requested=p.get('category'),collection=collections.remake.includes(requested)?'remake':collections.original.includes(requested)?'original':p.get('collection')==='original'?'original':'remake';
   const category=collections[collection].includes(requested)?requested:collections[collection][0];
-  state={collection,category,status:p.get('status')||'',q:p.get('q')||'',group:p.get('group')||'',chapter:p.get('chapter')||'',page:Math.max(1,Number(p.get('page'))||1),item:p.get('item')||''};renderCategory();}
+  const legacy=category==='buildings'&&(p.get('view')==='materials'||['item','q','status','group','page'].some(key=>p.get(key)));
+  state={collection,category,view:legacy?'materials':'',status:p.get('status')||'',q:p.get('q')||'',group:p.get('group')||'',chapter:p.get('chapter')||'',page:Math.max(1,Number(p.get('page'))||1),item:p.get('item')||''};renderCategory();}
 function makeNavigation(){
-  $('categories').innerHTML=collections[state.collection].map(key=>{const c=categories[key];return `<button class="nav-button" data-category="${key}" aria-current="${key===state.category?'page':'false'}">${icon(c[3],'nav-icon')}<span>${c[0]}</span><span class="count">${(counts[key]||0).toLocaleString()}</span></button>`;}).join('');
+  $('categories').innerHTML=collections[state.collection].map(key=>{const c=categories[key];return `<button class="nav-button" data-category="${key}" aria-current="${key===state.category?'page':'false'}">${icon(c[3],'nav-icon')}<span>${c[0]}</span>${key==='buildings'?'':`<span class="count">${(counts[key]||0).toLocaleString()}</span>`}</button>`;}).join('');
   $('categories').querySelectorAll('button').forEach(button=>button.onclick=()=>{state={collection:state.collection,category:button.dataset.category,status:'',q:'',group:'',chapter:'',page:1,item:''};urlState();});
   document.querySelectorAll('[data-collection]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.collection===state.collection)));
 }
 function filtered(){const words=state.q.toLowerCase().trim().split(/\s+/).filter(Boolean);const rows=catalog.filter(x=>x.collection===state.collection&&x.kind===state.category&&(!state.group||x.group===state.group)&&(!state.chapter||x.chapters.includes(state.chapter))&&(!state.status||x.status===state.status)&&words.every(w=>x.search.includes(w)));return state.collection==='remake'?rows.sort((a,b)=>b.date.localeCompare(a.date)||a.title.localeCompare(b.title,'ko')):rows;}
 function renderCategory(){
   makeNavigation();const c=categories[state.category];$('title').textContent=c[0];$('breadcrumb').textContent='ARCHIVE / '+c[1];$('description').textContent=c[2];$('total').textContent=(counts[state.category]||0).toLocaleString()+'개 자료';
+  if(buildingView(!catalog.length))return;
+  if(state.category==='buildings'){$('title').textContent='이전 재질 기록';$('description').textContent='원작 건물에 새 재질을 적용해 보았던 초기 작업입니다.';}
   $('search').value=state.q;$('chapter').value=state.chapter;$('status-filter').value=state.status;
   for(const id of ['status-filter','status-label'])$(id).hidden=state.collection!=='remake';for(const id of ['chapter','chapter-label'])$(id).hidden=state.collection==='remake';
   const groups=[...new Set(catalog.filter(x=>x.kind===state.category).map(x=>x.group).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
   $('group').replaceChildren(new Option('전체',''),...groups.map(g=>new Option(g,g)));$('group').value=state.group;
   $('chapter').disabled=!['maps','models','terrain'].includes(state.category);
-  $('browse-title').textContent=c[0]+' 둘러보기';renderCards();
+  $('browse-title').textContent=$('title').textContent+' 둘러보기';renderCards();
   const list=filtered();const selected=byId.get(state.item);
   if(selected?.kind===state.category){if(current?.id!==selected.id)selectItem(selected.id,false);}
   else if(list.length)selectItem(list[0].id,false);
@@ -159,17 +182,18 @@ $('zoom-in').onclick=()=>viewer.zoom(.8);$('zoom-out').onclick=()=>viewer.zoom(1
 document.querySelector('.skip').onclick=e=>{e.preventDefault();$('main').focus();};
 $('copy-reference').onclick=async()=>{if(!current)return;const text=[current.title,location.href,...current.files.map(f=>f.path)].join('\n');try{await navigator.clipboard.writeText(text);$('copy-status').textContent='자료 링크와 원본 경로를 복사했습니다.';}catch{$('copy-status').textContent='복사를 허용하지 않았습니다. 관련 파일 링크를 이용하세요.';}};
 $('guide').onclick=()=>{const row=catalog.find(x=>x.kind==='docs'&&x.key==='README.ko.md');if(!row)return;state={collection:'original',category:'docs',status:'',q:'',group:'',chapter:'',page:1,item:row.id};urlState();};
-document.addEventListener('keydown',e=>{if(e.key==='/'&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)){e.preventDefault();$('search').focus();}});
+document.addEventListener('keydown',e=>{if(e.key==='/'&&!document.querySelector('.searchbox').hidden&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)){e.preventDefault();$('search').focus();}});
 window.addEventListener('hashchange',readRoute);
 async function refreshLibrary(){
   const button=$('refresh-library');button.disabled=true;button.textContent='자료 확인 중…';
-  try{const data=await readJson('/api/catalog');catalog=data.items;counts=data.counts;byId=new Map(catalog.map(x=>[x.id,x]));current=null;readRoute();connectionState(true);
+  try{const data=await readJson('/api/catalog');catalog=data.items;counts=data.counts;byId=new Map(catalog.map(x=>[x.id,x]));current=null;gallery?.clear();readRoute();connectionState(true);
     $('catalog-updated').textContent=new Date(data.updated).toLocaleDateString('ko-KR');$('catalog-updated').dateTime=data.updated;
     document.querySelector('.connection').textContent=data.contributionErrors.length?`기록 ${data.contributionErrors.length}개 확인 필요`:'최신 기록 연결됨';
   }catch(e){requestToken++;catalog=[];counts={};byId.clear();current=null;observer?.disconnect();resetThumbnails();viewer.clear();
     for(const id of ['preview','cards','stats','notes','files','related','detail-state','detail-summary','detail-subtitle','preview-caption','catalog-updated'])$(id).replaceChildren();
     for(const id of ['viewer-controls','media-controls','asset-views','full-image','copy-reference'])$(id).hidden=true;
-    makeNavigation();$('total').textContent='';$('result-count').textContent='';$('detail-title').textContent='자료 연결 대기';$('page-label').textContent='';$('previous').disabled=true;$('next').disabled=true;
+    if(new URLSearchParams(location.hash.slice(1)).get('category')==='buildings'){readRoute();}else{makeNavigation();buildingView(true);}
+    $('total').textContent='';$('result-count').textContent='';$('detail-title').textContent='자료 연결 대기';$('page-label').textContent='';$('previous').disabled=true;$('next').disabled=true;
     document.querySelector('.connection').textContent='자료 연결 없음';$('preview-status').textContent='이 PC의 원본이 연결되면 자료를 표시합니다.';connectionState(false);
   }
   finally{button.disabled=false;button.textContent='자료 새로고침';}
