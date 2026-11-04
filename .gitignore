@@ -1,0 +1,12 @@
+*
+!/.gitignore
+!/web/
+!/web/**
+/web/login.html
+!/package.json
+!/package-lock.json
+!/build-pages.mjs
+!/README-public.md
+!/test_static_client.mjs
+!/.github/
+!/.github/**
