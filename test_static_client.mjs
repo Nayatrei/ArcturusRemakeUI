@@ -1,9 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-const element=()=>({dataset:{},setAttribute(){},append(){},after(){},querySelector(){return {};}});
+const element=()=>({dataset:{},setAttribute(){},addEventListener(){},append(){},after(){},querySelector(){return {};}});
+globalThis.location=new URL('https://nayatrei.github.io/ArcturusRemakeUI/');
 globalThis.document={querySelector:()=>element(),createElement:element,querySelectorAll:()=>[],getElementById:()=>null};
 const client=await import('./web/data-source.js');
+test('direct local opening keeps the selected subject or map and stays on the companion',()=>{
+  assert.equal(client.localViewUrl('https://nayatrei.github.io/ArcturusRemakeUI/target-comparison.html?set=ragnie-buildings&cell=RGN-06'),'http://127.0.0.1:8899/target-comparison.html?set=ragnie-buildings&cell=RGN-06');
+  assert.equal(client.localViewUrl('https://remake.genesisframeworks.com/#collection=original&category=maps'),'http://127.0.0.1:8899/#collection=original&category=maps');
+  assert.equal(client.localViewUrl('https://example.org/files/unknown'),'http://127.0.0.1:8899/');
+});
 test('published shell resolves only registered data URLs to loopback',()=>{
   assert.equal(client.sourceUrl('/api/catalog'),'http://127.0.0.1:8899/api/catalog');
   const input={model:{url:'/files/abc'},path:'K:/private/source',note:'local record',link:'/target-comparison.html?set=test'};
