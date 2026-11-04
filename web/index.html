@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Arcturus · Research library</title><meta name="description" content="악튜러스의 맵, 모델, 캐릭터와 개발 기록을 살펴보는 로컬 자료함."><meta name="robots" content="noindex,nofollow">
+<link rel="icon" href="./icon.svg" type="image/svg+xml"><link rel="stylesheet" href="./style.css">
+<script type="importmap">{"imports":{"three":"./vendor/three/build/three.module.js","three/addons/":"./vendor/three/examples/jsm/"}}</script>
+</head><body>
+<a class="skip" href="#main">자료로 건너뛰기</a>
+<header class="topbar"><a class="brand" href="#category=maps"><img src="./icon.svg" alt="" width="40" height="40"><span>ARCTURUS<small>Research library</small></span></a>
+<div class="searchbox"><span aria-hidden="true">⌕</span><label class="sr" for="search">자료 검색</label><input id="search" type="search" placeholder="마을, 캐릭터, 파일 이름 검색…" autocomplete="off"><kbd>/</kbd></div>
+<span class="connection" role="status"><i></i> 원본 연결됨</span><button id="refresh-library" class="text-button">자료 새로고침</button><a class="journal" href="./contributing" target="_blank" rel="noopener">작업 등록 안내 ↗</a><form id="logout" action="/logout" method="post" hidden><button class="text-button">로그아웃</button></form>
+</header>
+<div class="workspace"><aside class="sidebar"><p class="eyebrow">COLLECTION</p><nav id="categories" aria-label="자료 분류"></nav>
+<div class="side-note"><img src="./icon.svg" alt="" width="32" height="32"><p>기억 속 세계를<br>다시 만드는 자료.</p><span>원본 · 제작 · 분석 기록</span></div>
+<div class="side-meta"><span>원작 · 리메이크 제작 자료</span><time id="catalog-updated"></time><button id="guide" class="text-button">자료함 사용 안내 ↗</button></div>
+</aside>
+<main id="main" tabindex="-1"><div class="collection-switch" aria-label="원작과 리메이크"><button id="original-collection" data-collection="original" aria-pressed="false">원작 자료 <span>ORIGINAL</span></button><button id="remake-collection" data-collection="remake" aria-pressed="true">리메이크 작업 <span>REMAKE</span></button></div><div class="heading"><div><p id="breadcrumb" class="eyebrow">ARCHIVE / ENVIRONMENTS</p><h1 id="title">마을과 세계</h1><p id="description">원작의 공간을 열고, 배치와 제작 자료를 함께 살펴보세요.</p></div><span id="total" class="total"></span></div>
+<section class="inspect" aria-label="선택한 자료"><div class="preview-column"><div class="preview-head"><span id="preview-label">선택한 자료</span><div id="viewer-controls" hidden><button id="orbit" aria-pressed="true">입체</button><button id="top">위에서</button><button id="zoom-in" aria-label="3D 확대">＋</button><button id="zoom-out" aria-label="3D 축소">−</button><button id="reset" aria-label="3D 카메라 초기화">초기화</button><label class="sr" for="material">3D 표현</label><select id="material"><option value="original">원본 색상</option><option value="lit">조명</option><option value="clay">형태</option><option value="wire">와이어</option></select></div></div>
+<div id="preview" class="preview"><div class="loading-state"><span></span><p>자료 목록을 연결하고 있습니다.</p></div></div>
+<div id="media-controls" class="media-controls" hidden></div><div id="asset-views" class="asset-views" aria-label="비교와 과정 이미지" hidden></div><div class="preview-caption"><span id="preview-caption">원본 파일을 직접 읽습니다.</span><span id="preview-status" role="status"></span><a id="full-image" target="_blank" rel="noopener" hidden>크게 보기 ↗</a></div></div>
+<aside class="details"><p id="detail-kind" class="eyebrow">REFERENCE</p><h2 id="detail-title">자료를 선택하세요</h2><div id="detail-state"></div><p id="detail-subtitle"></p><p id="detail-summary"></p><dl id="stats"></dl><div id="notes"></div><div id="related"></div><div id="files"></div><button id="copy-reference" hidden>참조 복사</button><p id="copy-status" role="status"></p></aside></section>
+<section class="browse" aria-labelledby="browse-title"><div class="browse-heading"><h2 id="browse-title">전체 자료</h2><span id="result-count" role="status"></span></div>
+<div class="filters"><label for="group">분류</label><select id="group"><option value="">전체</option></select><label id="chapter-label" for="chapter">장별 근거</label><select id="chapter"><option value="">전체</option><option value="prologue">서장</option><option value="chapter-1">1장</option><option value="chapter-2">2장</option><option value="chapter-3">3장</option><option value="finale">종장</option></select><label id="status-label" for="status-filter" hidden>작업 상태</label><select id="status-filter" hidden><option value="">전체 상태</option><option value="active">진행 중 · 기록 기준</option><option value="verified">단계 검증 완료</option><option value="concept">원화 제작</option><option value="review">검토·후속 작업</option><option value="archive">이전 작업 기록</option></select><button id="clear" class="text-button">필터 초기화</button></div>
+<div id="cards" class="cards" aria-live="polite"></div><div class="pagination"><button id="previous">← 이전</button><span id="page-label"></span><button id="next">다음 →</button></div></section>
+<footer>Arcturus reference archive <span>원본 검증과 게임 실행 검증은 구분합니다.</span></footer>
+</main></div><script type="module" src="./app.js"></script></body></html>

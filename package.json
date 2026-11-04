@@ -1,0 +1,7 @@
+{
+  "name": "arcturus-reference-library",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local visual browser for the verified Arcturus research collection",
+  "dependencies": { "three": "0.160.0", "marked": "18.1.2", "dompurify": "3.4.17" }
+}
