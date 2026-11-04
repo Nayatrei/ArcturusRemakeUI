@@ -30,10 +30,11 @@ export function createComparison(root,{onChoose,standalone=false}){
     const token=++generation,cell=set.cells.find(x=>x.id===cellId),index=set.cells.indexOf(cell);
     $('comparison-sets').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.set===set.id)));
     $('comparison-cell').value=cellId;$('comparison-prev').disabled=index<=0;$('comparison-next').disabled=index>=set.cells.length-1;
-    $('comparison-count').textContent=set.title+' · '+(cell?`${String(index+1).padStart(2,'0')} / ${set.cells.length}`:`전체 ${set.cells.length}종`);
-    $('comparison-subject').textContent=cell?`${cell.id} · ${cell.title}`:'전체 시트 비교';
-    $('comparison-note').textContent=set.note;$('comparison-map').href=pageUrl('/#collection=original&category=maps&item='+set.mapItemId);$('comparison-map').hidden=false;
+    $('comparison-count').textContent=set.title+' · '+(cell?`${String(index+1).padStart(2,'0')} / ${set.cells.length}`:(set.sheetLabel||`전체 ${set.cells.length}종`));
+    $('comparison-subject').textContent=cell?`${cell.id} · ${cell.title}`:(set.sheetLabel||'전체 시트 비교');
+    $('comparison-note').textContent=cell?.note||set.note;$('comparison-map').href=pageUrl('/#collection=original&category=maps&item='+set.mapItemId);$('comparison-map').hidden=false;
     $('comparison-model').hidden=!cell?.modelItemId;if(cell?.modelItemId)$('comparison-model').href=pageUrl('/#collection=original&category=models&item='+cell.modelItemId);
+    $('comparison-model').textContent=cell?.components?.length>1?'본체 3D 보기 ↗':'원본 3D 보기 ↗';
     if(standalone){
       const back=document.getElementById('comparison-back');back.href=set.assetBoard||pageUrl('/#collection=original&category=maps&item='+set.mapItemId);back.textContent=set.assetBoard?'도시 에셋 목록으로 ↗':'라그니 원작 맵으로 ↗';
       document.title=set.title+' · Original ↔ Target | Arcturus';
@@ -43,20 +44,22 @@ export function createComparison(root,{onChoose,standalone=false}){
     $('comparison-status').textContent='이미지를 불러오고 있습니다.';$('comparison-pair').setAttribute('aria-busy','true');
     for(const side of ['original','target']){$(side+'-image').hidden=true;$(side+'-full').hidden=true;}
     try{
-      const loaded=await Promise.allSettled(['original','target'].map(side=>loadImage(set[side].file)));if(token!==generation)return;
+      const sides=['original','target'];
+      const files=sides.map(side=>(cell?.[side]||set[side]).file);
+      const loaded=await Promise.allSettled(files.map(loadImage));if(token!==generation)return;
       ['original','target'].forEach((side,i)=>{
         if(loaded[i].status!=='fulfilled')return;
         const img=$(side+'-image');img.src=crop(loaded[i].value,cell?.[side+'Rect']);img.alt=`${set.title} · ${cell?cell.title:'전체 시트'} · ${side==='original'?'Original 원작':'Target 목표 원화'} · 두 방향`;img.hidden=false;
-        $(side+'-full').href=set[side].file.url;$(side+'-full').hidden=false;
+        $(side+'-full').href=files[i].url;$(side+'-full').hidden=false;
       });
-      $('comparison-status').textContent=loaded.some(x=>x.status==='rejected')?'연결되지 않은 원본은 빈칸으로 표시합니다.':cell?'같은 건물의 두 방향을 Original과 Target으로 비교합니다.':'전체 시트입니다. 위에서 건물을 선택하면 크게 비교할 수 있습니다.';
+      $('comparison-status').textContent=loaded.some(x=>x.status==='rejected')?'연결되지 않은 원본은 빈칸으로 표시합니다.':cell?.original?'각 이미지에서 왼쪽은 앞면, 오른쪽은 뒷면입니다.':cell?'같은 건물의 두 방향을 Original과 Target으로 비교합니다.':'시트입니다. 위에서 건물을 선택하면 크게 비교할 수 있습니다.';
     }catch(error){if(token!==generation)return;$('comparison-status').textContent='이미지를 열지 못했습니다. 페이지를 새로고침하거나 자료함에서 원본 연결을 확인하세요.';console.error('Target comparison image unavailable',error);}
     finally{if(token===generation)$('comparison-pair').setAttribute('aria-busy','false');}
   }
   function chooseSet(id,requested){
     set=data.sets.find(x=>x.id===id)||data.sets[0];cellId=requested==='all'?'all':set.cells.some(x=>x.id===requested)?requested:set.cells[0].id;
     if($('comparison-cell').dataset.set!==set.id){
-      $('comparison-cell').replaceChildren(new Option('전체 시트','all'),...set.cells.map(x=>new Option(`${x.id} · ${x.title}`,x.id)));
+      $('comparison-cell').replaceChildren(new Option(set.sheetLabel||'전체 시트','all'),...set.cells.map(x=>new Option(`${x.id} · ${x.title}`,x.id)));
       $('comparison-cell').dataset.set=set.id;
     }
     $('comparison-cell').disabled=false;render();
@@ -77,7 +80,7 @@ export function createComparison(root,{onChoose,standalone=false}){
   return {clear,async show(id,requested){
     const token=++selection;
     try{
-      pending??=readJson('/api/target-comparisons');
+      pending??=readJson('/api/target-comparisons?views=pairs');
       const rows=await pending;if(token!==selection)return;
       if(!data){
         data=rows;
