@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Arcturus · Research library</title><meta name="description" content="악튜러스의 맵, 모델, 캐릭터와 개발 기록을 살펴보는 로컬 자료함."><meta name="robots" content="noindex,nofollow">
-<link rel="icon" href="./icon.svg" type="image/svg+xml"><link rel="stylesheet" href="./style.css">
+<link rel="icon" href="./icon.svg" type="image/svg+xml"><link rel="stylesheet" href="./style.css"><link rel="stylesheet" href="./target-comparison.css">
 <script type="importmap">{"imports":{"three":"./vendor/three/build/three.module.js","three/addons/":"./vendor/three/examples/jsm/"}}</script>
 </head><body>
 <a class="skip" href="#main">자료로 건너뛰기</a>
@@ -14,6 +14,8 @@
 <div class="side-meta"><span>원작 · 리메이크 제작 자료</span><time id="catalog-updated"></time><button id="guide" class="text-button">자료함 사용 안내 ↗</button></div>
 </aside>
 <main id="main" tabindex="-1"><div class="collection-switch" aria-label="원작과 리메이크"><button id="original-collection" data-collection="original" aria-pressed="false">원작 자료 <span>ORIGINAL</span></button><button id="remake-collection" data-collection="remake" aria-pressed="true">리메이크 작업 <span>REMAKE</span></button></div><div class="heading"><div><p id="breadcrumb" class="eyebrow">ARCHIVE / ENVIRONMENTS</p><h1 id="title">마을과 세계</h1><p id="description">원작의 공간을 열고, 배치와 제작 자료를 함께 살펴보세요.</p></div><span id="total" class="total"></span></div>
+<nav id="building-views" aria-label="건물 보기" hidden><a id="target-view" href="#collection=remake&amp;category=buildings">원작 ↔ 목표 원화</a><a id="materials-view" href="#collection=remake&amp;category=buildings&amp;view=materials">이전 재질 기록</a></nav>
+<div id="building-gallery" hidden></div>
 <section class="inspect" aria-label="선택한 자료"><div class="preview-column"><div class="preview-head"><span id="preview-label">선택한 자료</span><div id="viewer-controls" hidden><button id="orbit" aria-pressed="true">입체</button><button id="top">위에서</button><button id="zoom-in" aria-label="3D 확대">＋</button><button id="zoom-out" aria-label="3D 축소">−</button><button id="reset" aria-label="3D 카메라 초기화">초기화</button><label class="sr" for="material">3D 표현</label><select id="material"><option value="original">원본 색상</option><option value="lit">조명</option><option value="clay">형태</option><option value="wire">와이어</option></select></div></div>
 <div id="preview" class="preview"><div class="loading-state"><span></span><p>자료 목록을 연결하고 있습니다.</p></div></div>
 <div id="media-controls" class="media-controls" hidden></div><div id="asset-views" class="asset-views" aria-label="비교와 과정 이미지" hidden></div><div class="preview-caption"><span id="preview-caption">원본 파일을 직접 읽습니다.</span><span id="preview-status" role="status"></span><a id="full-image" target="_blank" rel="noopener" hidden>크게 보기 ↗</a></div></div>
