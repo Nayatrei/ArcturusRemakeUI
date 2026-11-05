@@ -52,7 +52,10 @@ export function createComparison(root,{onChoose,standalone=false}){
         const img=$(side+'-image');img.src=crop(loaded[i].value,cell?.[side+'Rect']);img.alt=`${set.title} · ${cell?cell.title:'전체 시트'} · ${side==='original'?'Original 원작':'Target 목표 원화'} · 두 방향`;img.hidden=false;
         $(side+'-full').href=files[i].url;$(side+'-full').hidden=false;
       });
-      $('comparison-status').textContent=loaded.some(x=>x.status==='rejected')?'연결되지 않은 원본은 빈칸으로 표시합니다.':cell?.original?'각 이미지에서 왼쪽은 앞면, 오른쪽은 뒷면입니다.':cell?'같은 건물의 두 방향을 Original과 Target으로 비교합니다.':'시트입니다. 위에서 건물을 선택하면 크게 비교할 수 있습니다.';
+      let message='시트입니다. 위에서 건물을 선택하면 크게 비교할 수 있습니다.';
+      if(cell)message=cell.angleGuide||'양쪽 패널에서 같은 위치의 컷끼리 비교하세요.';
+      if(loaded.some(result=>result.status==='rejected'))message='연결되지 않은 원본은 빈칸으로 표시합니다.';
+      $('comparison-status').textContent=message;
     }catch(error){if(token!==generation)return;$('comparison-status').textContent='이미지를 열지 못했습니다. 페이지를 새로고침하거나 자료함에서 원본 연결을 확인하세요.';console.error('Target comparison image unavailable',error);}
     finally{if(token===generation)$('comparison-pair').setAttribute('aria-busy','false');}
   }
