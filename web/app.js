@@ -133,7 +133,12 @@ function readRoute(){const p=new URLSearchParams(location.hash.slice(1));if(p.ha
   const requested=p.get('category'),collection=collections.remake.includes(requested)?'remake':collections.original.includes(requested)?'original':p.get('collection')==='original'?'original':'remake';
   const category=collections[collection].includes(requested)?requested:collections[collection][0];
   const legacy=category==='buildings'&&(p.get('view')==='materials'||['item','q','status','group','page'].some(key=>p.get(key)));
-  state={collection,category,view:legacy?'materials':'',status:p.get('status')||'',q:p.get('q')||'',group:p.get('group')||'',chapter:p.get('chapter')||'',page:Math.max(1,Number(p.get('page'))||1),item:p.get('item')||''};renderCategory();}
+  state={collection,category,view:legacy?'materials':'',status:p.get('status')||'',q:p.get('q')||'',group:p.get('group')||'',chapter:p.get('chapter')||'',page:Math.max(1,Number(p.get('page'))||1),item:p.get('item')||''};renderCategory();
+  const saved=history.state?.browse;
+  if(!state.item&&saved?.hash===location.hash){
+    requestAnimationFrame(()=>{if(location.hash===saved.hash)window.scrollTo(0,saved.y);});
+  }
+}
 function makeNavigation(){
   $('categories').innerHTML=collections[state.collection].map(key=>{const c=categories[key];return `<button class="nav-button" data-category="${key}" aria-current="${key===state.category?'page':'false'}">${icon(c[3],'nav-icon')}<span>${c[0]}</span>${key==='buildings'?'':`<span class="count">${(counts[key]||0).toLocaleString()}</span>`}</button>`;}).join('');
   $('categories').querySelectorAll('button').forEach(button=>button.onclick=()=>{state={collection:state.collection,category:button.dataset.category,status:'',q:'',group:'',chapter:'',page:1,item:''};urlState();});
@@ -194,7 +199,9 @@ function renderCards(){
     return;
   }
   function appendOriginal(){
-    const limit=Math.min(list.length,Math.max(state.page*perPage,end+perPage));
+    const saved=history.state?.browse;
+    const restoreCount=!state.item&&saved?.hash===location.hash?saved.count:0;
+    const limit=Math.min(list.length,Math.max(state.page*perPage,end+perPage,restoreCount));
     for(const row of list.slice(end,limit))appendCard(row);
     end=limit;pager.hidden=end>=list.length;
     if(!pager.hidden)observer.observe(pager);
@@ -210,7 +217,10 @@ function renderCards(){
     } else if(row.model){const image=document.createElement('img');image.alt=row.title+' 3D 미리보기';image.dataset.file=row.model.id;image.hidden=true;image.onload=()=>{image.hidden=false;media.querySelector('svg')?.remove();};media.append(image);button.dataset.thumbnail='true';}
     if(row.model){const tag=document.createElement('span');tag.className='tag';tag.textContent='3D';media.append(tag);}
     const info=document.createElement('span');info.className='card-info';info.innerHTML=`${row.status?`<span class="work-meta"><span class="status-dot ${row.status}">${escape(statusNames[row.status])}</span><time>${escape(row.date)}</time></span>`:''}<strong>${escape(row.title)}</strong><small>${escape(row.subtitle)}</small>`;
-    button.append(media,info);button.onclick=()=>{state.item=row.id;urlState();$('main').scrollIntoView({block:'start'});};cards.append(button);if(button.dataset.thumbnail)observer.observe(button);
+    button.append(media,info);button.onclick=()=>{
+      history.replaceState({browse:{hash:location.hash,count:cards.childElementCount,y:window.scrollY}},'');
+      state.item=row.id;urlState();$('main').scrollIntoView({block:'start'});
+    };cards.append(button);if(button.dataset.thumbnail)observer.observe(button);
   }
 
 }
