@@ -14,7 +14,7 @@ const categories={
   sprites:['스프라이트','SPRITES','캐릭터, 몬스터, 이펙트와 UI의 이미지 프레임을 탐색하세요.','M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z'],
   art:['원화 비교','CONCEPT ART','같은 인물을 새롭게 해석한 원작과 리메이크 원화입니다.','M3 4h18v16H3zm0 12l6-6 5 5 3-3 4 4M16 7h1'],
   docs:['개발 자료','DEVELOPMENT','장별 흐름, 이벤트, 데이터와 재현 근거를 읽어보세요.','M4 3h12l4 4v14H4zm11 0v5h5M8 12h8M8 16h8'],
-  work:['작업 한눈에','WORK IN PROGRESS','원화에서 제작·검증까지. 결과를 고르면 연결된 작업 과정을 볼 수 있습니다.','M4 4h16v16H4zm4 4h8M8 12h8M8 16h5'],
+  work:['작업 한눈에','WORK IN PROGRESS','원화, 배역, 모델과 제작 과정을 한곳에서 비교합니다.','M4 4h16v16H4zm4 4h8M8 12h8M8 16h5'],
   worlds:['월드·마을 원화','WORLD TARGETS','기억 속 마을을 다시 그린 방향과 버전별 목표 원화입니다.','M3 19l6-3 6 3 6-3V5l-6 3-6-3-6 3zm6-14v11m6-8v11'],
   rooms:['실내·건축 원화','ROOM CONCEPTS','원작 공간, 조립 중간본, 새 목표 원화를 구분해 비교합니다.','M3 10l9-7 9 7v11H3zm6 11v-7h6v7'],
   stages:['TA 제작 과정','PRODUCTION STAGES','원화 선택 · High/Low · UV · 베이크 · PBR · Unity의 실제 제작 기록입니다.','M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z'],
@@ -30,10 +30,82 @@ const statusNames={active:'진행 중 · 기록 기준',verified:'단계 검증 
 const icon=(path,cls='')=>`<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" aria-hidden="true"><path d="${path}"/></svg>`;
 let catalog=[],byId=new Map(),counts={},state={collection:'remake',category:'work',status:'',q:'',group:'',chapter:'',page:1,item:''};
 let current=null,requestToken=0,filterTimer,observer;
-const perPage=18;
+const perPage=36;
+const detailsCache=new Map();
+function fetchItem(id){
+  if(!detailsCache.has(id))detailsCache.set(id,readJson('/api/item/'+id).catch(error=>{detailsCache.delete(id);throw error;}));
+  return detailsCache.get(id);
+}
+function clearLinked(){
+  $('linked-board').hidden=true;
+  $('linked-board').replaceChildren();
+}
+function mediaFigure(file,caption){
+  const label=escape(caption||file.caption||file.name);
+  return `<figure><a href="${escape(file.url)}" target="_blank" rel="noopener"><img loading="lazy" decoding="async" crossorigin="anonymous" src="${escape(file.url)}" alt="${label}"></a><figcaption>${label}</figcaption></figure>`;
+}
+function reviewCard(row){
+  const card=document.createElement('article');
+  card.className='review-card';card.dataset.id=row.id;
+  const url='#'+new URLSearchParams({collection:row.collection,category:row.kind,item:row.id});
+  card.innerHTML=`<header><small>${escape(row.group||categories[row.kind][0])}${row.status?' · '+escape(statusNames[row.status]||row.status):''}</small><h3>${escape(row.title)}</h3></header><div class="review-media" aria-busy="true"></div><p class="review-summary">${escape(row.subtitle)}</p><a class="review-source" href="${url}" target="_blank" rel="noopener">상세·원본 파일 ↗</a>`;
+  observer.observe(card);
+  return card;
+}
+async function fillReview(card){
+  const media=card.querySelector('.review-media');
+  try{
+    const item=await fetchItem(card.dataset.id);
+    if(!card.isConnected)return;
+    const pics=item.images?.length?item.images:item.image?[item.image]:[];
+    const summary=card.querySelector('.review-summary');
+    summary.textContent=item.summary||item.subtitle;
+    if(item.key.startsWith('npc-casting/')&&pics.length>1){
+      const [first,target,...others]=pics;
+      card.classList.add('casting-card');
+      const originals=[first,...others];
+      const roleName=file=>file.caption.replace(/^원작\s*·\s*/,'');
+      media.innerHTML=`<div class="casting-originals casting-lead"><h4>원작 NPC</h4>${mediaFigure(first,roleName(first))}</div><div class="casting-target"><h4>대체 후보 원화</h4>${mediaFigure(target,item.key.split('/').at(-1))}</div>`;
+      if(others.length){
+        const strip=document.createElement('div');strip.className='casting-originals casting-alternates';
+        strip.innerHTML=`<h4>같은 모델을 쓸 배역 · ${others.length}</h4><div>${others.map(file=>mediaFigure(file,roleName(file))).join('')}</div>`;
+        media.append(strip);
+      }
+      const fit=document.createElement('details');fit.className='review-fit';
+      fit.innerHTML='<summary>배역별 배색·제작 메모</summary>'+item.notes.filter(note=>!note.startsWith('RGBA 설계안')).map(note=>`<p>${escape(note)}</p>`).join('');
+      summary.after(fit);
+    }else{
+      media.innerHTML=pics.map(f=>mediaFigure(f,f.caption||item.title)).join('');
+      if(!pics.length&&item.model){
+        const label=document.createElement('small');label.textContent=item.model.format.toUpperCase()+' 모델 · 등록된 이미지 없음';media.append(label);
+      }
+    }
+    media.hidden=!media.childElementCount;
+  }catch{if(card.isConnected)media.textContent='미리보기를 읽지 못했습니다. 상세에서 다시 확인하세요.';}
+  media.setAttribute('aria-busy','false');
+}
+function reviewGroup(title,rows,parent){
+  const section=document.createElement('section');section.className='review-section';
+  const heading=document.createElement('h2');heading.textContent=title+' · '+rows.length;
+  const grid=document.createElement('div');grid.className='review-grid';grid.append(...rows.map(reviewCard));
+  section.append(heading,grid);parent.append(section);
+}
+function showLinked(item,rows){
+  const board=$('linked-board');board.replaceChildren();
+  const title=document.createElement('h2');title.textContent=item.title;board.append(title);
+  const desc=document.createElement('p');desc.textContent=item.summary||item.subtitle;board.append(desc);
+  if(item.key==='npc-casting-4head'){
+    const legend=document.createElement('p');legend.textContent='배색 계획 · R 머리 / G 주 의상 / B 피부 / A 보조 부위';board.append(legend);
+  }
+  for(const group of new Set(rows.map(row=>row.group))){
+    reviewGroup(group||'연결 자료',rows.filter(row=>row.group===group),board);
+  }
+  board.hidden=false;
+}
 const viewer=new ModelViewer($('preview'),message=>$('preview-status').textContent=message);
-let gallery;
+let gallery,homeGallery;
 function buildingView(offline=false){
+  clearLinked();homeGallery?.clear();homeGallery=null;
   const buildings=state.category==='buildings',compare=buildings&&state.view!=='materials';
   $('building-views').hidden=!buildings;$('building-gallery').hidden=!compare;
   document.querySelector('.inspect').hidden=compare;document.querySelector('.browse').hidden=compare;
@@ -67,40 +139,80 @@ function makeNavigation(){
   $('categories').querySelectorAll('button').forEach(button=>button.onclick=()=>{state={collection:state.collection,category:button.dataset.category,status:'',q:'',group:'',chapter:'',page:1,item:''};urlState();});
   document.querySelectorAll('[data-collection]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.collection===state.collection)));
 }
-function filtered(){const words=state.q.toLowerCase().trim().split(/\s+/).filter(Boolean);const rows=catalog.filter(x=>x.collection===state.collection&&x.kind===state.category&&(!state.group||x.group===state.group)&&(!state.chapter||x.chapters.includes(state.chapter))&&(!state.status||x.status===state.status)&&words.every(w=>x.search.includes(w)));return state.collection==='remake'?rows.sort((a,b)=>b.date.localeCompare(a.date)||a.title.localeCompare(b.title,'ko')):rows;}
+function filtered(){const words=state.q.toLowerCase().trim().split(/\s+/).filter(Boolean);const rows=catalog.filter(x=>x.collection===state.collection&&(state.category==='work'&&!state.item||x.kind===state.category)&&(!state.group||x.group===state.group)&&(!state.chapter||x.chapters.includes(state.chapter))&&(!state.status||x.status===state.status)&&words.every(w=>x.search.includes(w)));return state.collection==='remake'?rows.sort((a,b)=>b.date.localeCompare(a.date)||a.title.localeCompare(b.title,'ko')):rows;}
 function renderCategory(){
   makeNavigation();const c=categories[state.category];$('title').textContent=c[0];$('breadcrumb').textContent='ARCHIVE / '+c[1];$('description').textContent=c[2];$('total').textContent=(counts[state.category]||0).toLocaleString()+'개 자료';
   if(buildingView(!catalog.length))return;
   if(state.category==='buildings'){$('title').textContent='이전 재질 기록';$('description').textContent='원작 건물에 새 재질을 적용해 보았던 초기 작업입니다.';}
   $('search').value=state.q;$('chapter').value=state.chapter;$('status-filter').value=state.status;
   for(const id of ['status-filter','status-label'])$(id).hidden=state.collection!=='remake';for(const id of ['chapter','chapter-label'])$(id).hidden=state.collection==='remake';
-  const groups=[...new Set(catalog.filter(x=>x.kind===state.category).map(x=>x.group).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
+  const groups=[...new Set(catalog.filter(x=>x.collection===state.collection&&(state.category==='work'&&!state.item||x.kind===state.category)).map(x=>x.group).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
   $('group').replaceChildren(new Option('전체',''),...groups.map(g=>new Option(g,g)));$('group').value=state.group;
   $('chapter').disabled=!['maps','models','terrain'].includes(state.category);
   $('browse-title').textContent=$('title').textContent+' 둘러보기';renderCards();
-  const list=filtered();const selected=byId.get(state.item);
-  if(selected?.kind===state.category){if(current?.id!==selected.id)selectItem(selected.id,false);}
-  else if(list.length)selectItem(list[0].id,false);
-  else {requestToken++;viewer.clear();current=null;$('viewer-controls').hidden=true;$('media-controls').hidden=true;$('asset-views').hidden=true;$('full-image').hidden=true;$('preview').className='preview';$('preview').innerHTML='<p class="empty">검색 결과가 없습니다. 검색어나 필터를 바꿔보세요.</p>';$('detail-title').textContent='자료를 찾을 수 없습니다.';for(const id of ['stats','notes','files','related','detail-state','detail-summary','detail-subtitle'])$(id).replaceChildren();$('copy-reference').hidden=true;}
+  const selected=byId.get(state.item);
+  document.querySelector('.inspect').hidden=!selected;
+  if(selected?.kind===state.category)selectItem(selected.id,false);
+  else {requestToken++;viewer.clear();current=null;}
 }
 function renderCards(){
-  observer?.disconnect();resetThumbnails();const list=filtered();const pages=Math.max(1,Math.ceil(list.length/perPage));state.page=Math.min(state.page,pages);
-  $('result-count').textContent=`${list.length.toLocaleString()}개 결과`;$('page-label').textContent=`${state.page} / ${pages}`;$('previous').disabled=state.page===1;$('next').disabled=state.page===pages;
-  const visible=list.slice((state.page-1)*perPage,state.page*perPage);$('cards').replaceChildren();
-  if(!visible.length){$('cards').innerHTML='<div class="empty"><h3>일치하는 자료가 없습니다.</h3><p>검색어를 줄이거나 필터를 초기화해 보세요.</p></div>';return;}
-  for(const row of visible){
+  observer?.disconnect();resetThumbnails();homeGallery?.clear();homeGallery=null;
+  const allWork=state.category==='work'&&!state.item;
+  const list=filtered();
+  const remake=state.collection==='remake',cards=$('cards'),pager=$('more-results').parentElement;
+  cards.replaceChildren();cards.classList.toggle('review-list',remake);
+  pager.hidden=true;
+  $('result-count').textContent=`${list.length.toLocaleString()}개 결과`;
+  if(allWork){$('total').textContent=list.length+'개 자료';$('browse-title').textContent='전체 리메이크 작업';}
+  let end=0;
+  observer=new IntersectionObserver(entries=>{
+    for(const entry of entries){
+      if(!entry.isIntersecting)continue;
+      const el=entry.target;observer.unobserve(el);
+      if(el===pager){appendOriginal();continue;}
+      if(el.matches('.review-card')){fillReview(el);continue;}
+      const row=byId.get(el.dataset.id);
+      const sprite=el.querySelector('canvas');
+      if(sprite)drawSprite(sprite,row.image.url,row.crop);
+      const img=el.querySelector('img[data-file]');if(img)thumbnail(row.model,img);
+    }
+  },{rootMargin:'260px'});
+  if(!list.length){cards.innerHTML='<p class="empty">일치하는 자료가 없습니다.</p>';return;}
+  if(remake){
+    const groups=allWork?collections.remake.filter(kind=>list.some(r=>r.kind===kind)):[...new Set(list.map(r=>r.group))];
+    for(const group of groups){
+      const rows=list.filter(row=>(allWork?row.kind:row.group)===group);
+      if(allWork&&group==='buildings'&&!state.q&&!state.group&&!state.status){
+        const section=document.createElement('section');section.className='review-section';
+        const title=document.createElement('h2');title.textContent='마을 건물 · 원작과 목표 원화';
+        const galleryRoot=document.createElement('div');section.append(title,galleryRoot);cards.append(section);
+        homeGallery=createComparison(galleryRoot,{onChoose:()=>{}});
+        homeGallery.show('ragnie-buildings');
+      }
+      reviewGroup(allWork&&group==='buildings'?'건물 재질 연구':allWork?categories[group][0]:group||categories[state.category][0],rows,cards);
+    }
+    return;
+  }
+  function appendOriginal(){
+    const limit=Math.min(list.length,Math.max(state.page*perPage,end+perPage));
+    for(const row of list.slice(end,limit))appendCard(row);
+    end=limit;pager.hidden=end>=list.length;
+    if(!pager.hidden)observer.observe(pager);
+  }
+  $('more-results').onclick=appendOriginal;
+  appendOriginal();
+  function appendCard(row){
     const button=document.createElement('button');button.className='card';button.dataset.id=row.id;button.dataset.kind=row.kind;button.setAttribute('aria-pressed',String(row.id===state.item));
     const media=document.createElement('span');media.className='card-media';media.innerHTML=icon(categories[row.kind][3],'placeholder');
     if(row.image){
-      if(row.crop){const canvas=document.createElement('canvas');canvas.width=240;canvas.height=180;canvas.setAttribute('aria-label',row.title+' 원본 프레임');media.replaceChildren(canvas);drawSprite(canvas,row.image.url,row.crop);}
+      if(row.crop){const canvas=document.createElement('canvas');canvas.width=240;canvas.height=180;canvas.setAttribute('aria-label',row.title+' 원본 프레임');media.replaceChildren(canvas);button.dataset.thumbnail="true";}
       else{const image=document.createElement('img');image.crossOrigin='anonymous';image.src=row.image.url;image.alt=row.title;image.loading='lazy';image.onerror=()=>{media.replaceChildren();};media.replaceChildren(image);}
     } else if(row.model){const image=document.createElement('img');image.alt=row.title+' 3D 미리보기';image.dataset.file=row.model.id;image.hidden=true;image.onload=()=>{image.hidden=false;media.querySelector('svg')?.remove();};media.append(image);button.dataset.thumbnail='true';}
     if(row.model){const tag=document.createElement('span');tag.className='tag';tag.textContent='3D';media.append(tag);}
     const info=document.createElement('span');info.className='card-info';info.innerHTML=`${row.status?`<span class="work-meta"><span class="status-dot ${row.status}">${escape(statusNames[row.status])}</span><time>${escape(row.date)}</time></span>`:''}<strong>${escape(row.title)}</strong><small>${escape(row.subtitle)}</small>`;
-    button.append(media,info);button.onclick=()=>selectItem(row.id,true);$('cards').append(button);
+    button.append(media,info);button.onclick=()=>{state.item=row.id;urlState();$('main').scrollIntoView({block:'start'});};cards.append(button);if(button.dataset.thumbnail)observer.observe(button);
   }
-  observer=new IntersectionObserver(entries=>{for(const entry of entries){if(!entry.isIntersecting)continue;observer.unobserve(entry.target);const row=byId.get(entry.target.dataset.id);const img=entry.target.querySelector('img[data-file]');if(img)thumbnail(row.model,img);}}, {rootMargin:'80px'});
-  $('cards').querySelectorAll('[data-thumbnail]').forEach(el=>observer.observe(el));
+
 }
 async function drawSprite(canvas,url,rect){
   const drawToken=String(Number(canvas.dataset.drawToken||0)+1);canvas.dataset.drawToken=drawToken;
@@ -109,8 +221,9 @@ async function drawSprite(canvas,url,rect){
 }
 async function selectItem(id,updateRoute=true){
   const token=++requestToken;state.item=id;if(updateRoute)urlState(true);
+  document.querySelector('.inspect').hidden=false;clearLinked();
   $('cards').querySelectorAll('.card').forEach(c=>c.setAttribute('aria-pressed',String(c.dataset.id===id)));
-  try{const item=await readJson('/api/item/'+id);if(token!==requestToken)return;
+  try{const item=await fetchItem(id);if(token!==requestToken)return;
     current=item;showDetails(item);if(updateRoute)$('main').scrollIntoView({block:'start',behavior:'instant'});$('preview-label').textContent=item.key;$('preview-caption').textContent=item.model?'드래그로 회전 · 휠로 확대':'보존된 실제 자료';$('preview-status').textContent='';$('media-controls').hidden=true;$('asset-views').hidden=true;$('full-image').hidden=true;$('preview').className='preview';
     $('viewer-controls').hidden=!item.model;
     if(item.document){viewer.clear();await renderDocument(item.document.id,token);}
@@ -128,8 +241,13 @@ function showDetails(item){
   const links=(item.files||[]).map(f=>`<a class="file-link" href="${f.url}?download=1" title="${escape(f.path)}"><b class="format">${escape(f.format)}</b><span>${escape(f.name)}</span><small>${size(f.bytes)} ↓</small></a>`);
   $('files').innerHTML=`<div class="files-title"><span>관련 파일</span><span>${links.length}</span></div>${links.slice(0,5).join('')}${links.length>5?`<details><summary>파일 ${links.length-5}개 더 보기</summary>${links.slice(5).join('')}</details>`:''}`;
   const related=(item.related||[]).map(id=>byId.get(id)).filter(Boolean);
-  $('related').innerHTML=(item.targetComparison?`<a class="asset-board-link" href="${item.targetComparison}">Original ↔ Target 비교 ↗</a>`:'')+(item.assetBoard?`<a class="asset-board-link" href="${item.assetBoard}">건물·다리·공원 에셋 목록 ↗</a>`:'')+(related.length?`<details ${item.kind==='work'?'open':''}><summary>연결된 작업·자료 ${related.length}개</summary>${related.map(r=>`<button class="related-item" data-id="${r.id}">${escape(r.title)} ↗</button>`).join('')}</details>`:'');
-  $('related').querySelectorAll('button').forEach(b=>b.onclick=()=>{const row=byId.get(b.dataset.id);state={collection:row.collection,category:row.kind,status:'',q:'',group:'',chapter:'',page:1,item:row.id};urlState();});
+  $('related').innerHTML=(item.targetComparison?`<a class="asset-board-link" href="${item.targetComparison}">Original ↔ Target 비교 ↗</a>`:'')+(item.assetBoard?`<a class="asset-board-link" href="${item.assetBoard}">건물·다리·공원 에셋 목록 ↗</a>`:'');
+  if(related.length){
+    showLinked(item,related);
+    if(item.kind!=='work')document.querySelector('.inspect').after($('linked-board'));
+    else document.querySelector('.inspect').before($('linked-board'));
+    if(item.kind==='work')document.querySelector('.browse').hidden=true;
+  }
   $('copy-reference').hidden=false;$('copy-status').textContent='';
 }
 function showImages(images){
@@ -164,18 +282,18 @@ async function renderDocument(id,token){
   $('preview').replaceChildren(article);$('preview-caption').textContent=doc.path;$('preview-status').textContent='원문 연결';
 }
 async function openDocument(id){
+  document.querySelector('.inspect').hidden=false;
   const token=++requestToken;viewer.clear();
   $('preview-label').textContent='개발 자료';$('detail-kind').textContent='DOCUMENT';$('detail-title').textContent='연결된 문서';$('detail-subtitle').textContent='원문과 근거를 따라 읽습니다.';
   for(const name of ['stats','notes','related','detail-state','detail-summary'])$(name).replaceChildren();$('files').innerHTML=`<a class="file-link" href="${sourceUrl('/files/'+encodeURIComponent(id))}?download=1">원문 다운로드 ↓</a>`;
   $('copy-reference').hidden=true;current=null;
   try{await renderDocument(id,token);}catch{$('preview').innerHTML='<p class="error">문서를 읽지 못했습니다. 원문 다운로드를 이용하세요.</p>';}
 }
-function filtersChanged(){state.q=$('search').value;state.group=$('group').value;state.chapter=state.collection==='original'?$('chapter').value:'';state.status=state.collection==='remake'?$('status-filter').value:'';state.page=1;state.item='';urlState(true);renderCards();const list=filtered();if(list.length)selectItem(list[0].id,false);else renderCategory();}
+function filtersChanged(){state.q=$('search').value;state.group=$('group').value;state.chapter=state.collection==='original'?$('chapter').value:'';state.status=state.collection==='remake'?$('status-filter').value:'';state.page=1;state.item='';urlState(true);renderCategory();}
 $('search').oninput=()=>{clearTimeout(filterTimer);filterTimer=setTimeout(filtersChanged,200);};$('group').onchange=filtersChanged;$('chapter').onchange=filtersChanged;
 $('status-filter').onchange=filtersChanged;
 document.querySelectorAll('[data-collection]').forEach(b=>b.onclick=()=>{const collection=b.dataset.collection;state={collection,category:collections[collection][0],status:'',q:'',group:'',chapter:'',page:1,item:''};urlState();});
 $('clear').onclick=()=>{state.q='';state.group='';state.chapter='';state.status='';state.page=1;state.item='';urlState(true);renderCategory();};
-$('previous').onclick=()=>{state.page--;urlState(true);renderCards();};$('next').onclick=()=>{state.page++;urlState(true);renderCards();};
 $('orbit').onclick=()=>{viewer.view(false);$('orbit').setAttribute('aria-pressed','true');$('top').setAttribute('aria-pressed','false');};
 $('top').onclick=()=>{viewer.view(true);$('top').setAttribute('aria-pressed','true');$('orbit').setAttribute('aria-pressed','false');};$('reset').onclick=()=>viewer.view(false);$('material').onchange=()=>viewer.setMaterial($('material').value);
 $('zoom-in').onclick=()=>viewer.zoom(.8);$('zoom-out').onclick=()=>viewer.zoom(1.25);
@@ -186,6 +304,7 @@ document.addEventListener('keydown',e=>{if(e.key==='/'&&!document.querySelector(
 window.addEventListener('hashchange',readRoute);
 async function refreshLibrary(){
   const button=$('refresh-library');button.disabled=true;button.textContent='자료 확인 중…';
+  detailsCache.clear();
   try{const data=await readJson('/api/catalog');catalog=data.items;counts=data.counts;byId=new Map(catalog.map(x=>[x.id,x]));current=null;gallery?.clear();readRoute();connectionState(true);
     $('catalog-updated').textContent=new Date(data.updated).toLocaleDateString('ko-KR');$('catalog-updated').dateTime=data.updated;
     document.querySelector('.connection').textContent=data.contributionErrors.length?`기록 ${data.contributionErrors.length}개 확인 필요`:'최신 기록 연결됨';
@@ -193,7 +312,7 @@ async function refreshLibrary(){
     for(const id of ['preview','cards','stats','notes','files','related','detail-state','detail-summary','detail-subtitle','preview-caption','catalog-updated'])$(id).replaceChildren();
     for(const id of ['viewer-controls','media-controls','asset-views','full-image','copy-reference'])$(id).hidden=true;
     if(new URLSearchParams(location.hash.slice(1)).get('category')==='buildings'){readRoute();}else{makeNavigation();buildingView(true);}
-    $('total').textContent='';$('result-count').textContent='';$('detail-title').textContent='자료 연결 대기';$('page-label').textContent='';$('previous').disabled=true;$('next').disabled=true;
+    $('total').textContent='';$('result-count').textContent='';$('detail-title').textContent='자료 연결 대기';$('more-results').parentElement.hidden=true;clearLinked();
     document.querySelector('.connection').textContent='자료 연결 없음';$('preview-status').textContent='이 PC의 원본이 연결되면 자료를 표시합니다.';connectionState(false);
   }
   finally{button.disabled=false;button.textContent='자료 새로고침';}
