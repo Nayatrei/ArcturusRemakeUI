@@ -12,6 +12,7 @@ const categories={
   portraits:['캐릭터와 표정','PORTRAITS','원작 초상과 새 표정 원화를 나란히 비교하세요.','M16 7a4 4 0 11-8 0 4 4 0 018 0M4 21v-3a8 8 0 0116 0v3'],
   actors:['3D 액터','3D ACTORS','원작 3D 캐릭터의 초기 자세와 전체 프레임 자료입니다.','M12 2l9 5v10l-9 5-9-5V7zm0 10v10m-9-15l9 5 9-5'],
   sprites:['스프라이트','SPRITES','캐릭터, 몬스터, 이펙트와 UI의 이미지 프레임을 탐색하세요.','M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z'],
+  characters:['캐릭터','CHARACTERS','주인공과 NPC의 원화·표정·3D 제작을 한곳에서 비교합니다.','M16 7a4 4 0 11-8 0 4 4 0 018 0M4 21v-3a8 8 0 0116 0v3'],
   art:['원화 비교','CONCEPT ART','같은 인물을 새롭게 해석한 원작과 리메이크 원화입니다.','M3 4h18v16H3zm0 12l6-6 5 5 3-3 4 4M16 7h1'],
   docs:['개발 자료','DEVELOPMENT','장별 흐름, 이벤트, 데이터와 재현 근거를 읽어보세요.','M4 3h12l4 4v14H4zm11 0v5h5M8 12h8M8 16h8'],
   work:['작업 한눈에','WORK IN PROGRESS','원화, 배역, 모델과 제작 과정을 한곳에서 비교합니다.','M4 4h16v16H4zm4 4h8M8 12h8M8 16h5'],
@@ -25,7 +26,7 @@ const categories={
   records:['개발·제작 일지','WORK RECORDS','당시 상태와 실제 검증 범위를 날짜별로 남긴 기록입니다.','M4 3h12l4 4v14H4zm11 0v5h5M8 12h8M8 16h8'],
   characterwork:['캐릭터 3D 제작','CHARACTER PRODUCTION','HQ/SQ 버전별 원화·중간 모델·편집 소스와 납품 파일을 확인하세요.','M16 7a4 4 0 11-8 0 4 4 0 018 0M4 21v-3a8 8 0 0116 0v3']
 };
-const collections={original:['maps','models','terrain','portraits','actors','sprites','docs'],remake:['work','worlds','rooms','stages','crafted','art','expressions','characterwork','terrainwork','buildings','records']};
+const collections={original:['maps','models','terrain','portraits','actors','sprites','docs'],remake:['work','characters','worlds','rooms','stages','crafted','art','expressions','characterwork','terrainwork','buildings','records']};
 const statusNames={active:'진행 중 · 기록 기준',verified:'단계 검증 완료',concept:'원화 제작',review:'검토·후속 작업',archive:'이전 작업 기록'};
 const icon=(path,cls='')=>`<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" aria-hidden="true"><path d="${path}"/></svg>`;
 let catalog=[],byId=new Map(),counts={},state={collection:'remake',category:'work',status:'',q:'',group:'',chapter:'',page:1,item:''};
@@ -47,9 +48,18 @@ function mediaFigure(file,caption){
 function reviewCard(row){
   const card=document.createElement('article');
   card.className='review-card';card.dataset.id=row.id;
-  const url='#'+new URLSearchParams({collection:row.collection,category:row.kind,item:row.id});
+  const inCharacters=state.category==='characters';
+  const url='#'+new URLSearchParams({collection:row.collection,category:inCharacters?'characters':row.kind,item:row.id,...(state.q?{q:state.q}:{}),...(state.group?{group:state.group}:{}),...(state.status?{status:state.status}:{})});
   card.innerHTML=`<header><small>${escape(row.group||categories[row.kind][0])}${row.status?' · '+escape(statusNames[row.status]||row.status):''}</small><h3>${escape(row.title)}</h3></header><div class="review-media" aria-busy="true"></div><p class="review-summary">${escape(row.subtitle)}</p><a class="review-source" href="${url}" target="_blank" rel="noopener">상세·원본 파일 ↗</a>`;
-  observer.observe(card);
+  if(inCharacters){
+    const source=card.querySelector('.review-source');source.removeAttribute('target');
+    source.onclick=event=>{
+      if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
+      event.preventDefault();history.replaceState({browse:{hash:location.hash,count:$('cards').querySelectorAll('.review-card').length,y:window.scrollY}},'');
+      state.item=row.id;urlState();$('main').scrollIntoView({block:'start'});
+    };
+  }
+  if(detailsCache.has(row.id))fillReview(card);else observer.observe(card);
   return card;
 }
 async function fillReview(card){
@@ -140,29 +150,34 @@ function readRoute(){const p=new URLSearchParams(location.hash.slice(1));if(p.ha
   }
 }
 function makeNavigation(){
-  $('categories').innerHTML=collections[state.collection].map(key=>{const c=categories[key];return `<button class="nav-button" data-category="${key}" aria-current="${key===state.category?'page':'false'}">${icon(c[3],'nav-icon')}<span>${c[0]}</span>${key==='buildings'?'':`<span class="count">${(counts[key]||0).toLocaleString()}</span>`}</button>`;}).join('');
+  $('categories').innerHTML=collections[state.collection].filter(key=>!['art','expressions','characterwork'].includes(key)).map(key=>{const c=categories[key];return `<button class="nav-button" data-category="${key}" aria-current="${(key===state.category||key==='characters'&&['art','expressions','characterwork'].includes(state.category))?'page':'false'}">${icon(c[3],'nav-icon')}<span>${c[0]}</span>${key==='buildings'?'':`<span class="count">${(counts[key]||0).toLocaleString()}</span>`}</button>`;}).join('');
   $('categories').querySelectorAll('button').forEach(button=>button.onclick=()=>{state={collection:state.collection,category:button.dataset.category,status:'',q:'',group:'',chapter:'',page:1,item:''};urlState();});
   document.querySelectorAll('[data-collection]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.collection===state.collection)));
 }
-function filtered(){const words=state.q.toLowerCase().trim().split(/\s+/).filter(Boolean);const rows=catalog.filter(x=>x.collection===state.collection&&(state.category==='work'&&!state.item||x.kind===state.category)&&(!state.group||x.group===state.group)&&(!state.chapter||x.chapters.includes(state.chapter))&&(!state.status||x.status===state.status)&&words.every(w=>x.search.includes(w)));return state.collection==='remake'?rows.sort((a,b)=>b.date.localeCompare(a.date)||a.title.localeCompare(b.title,'ko')):rows;}
+function inCategory(row){
+  if(state.category==='characters')return ['art','expressions','characterwork'].includes(row.kind)||row.kind==='work'&&row.group==='Arcturus NPC';
+  return state.category==='work'&&!state.item||row.kind===state.category;
+}
+function filtered(){const words=state.q.toLowerCase().trim().split(/\s+/).filter(Boolean);const rows=catalog.filter(x=>x.collection===state.collection&&inCategory(x)&&(!state.group||x.group===state.group)&&(!state.chapter||x.chapters.includes(state.chapter))&&(!state.status||x.status===state.status)&&words.every(w=>x.search.includes(w)));return state.collection==='remake'?rows.sort((a,b)=>b.date.localeCompare(a.date)||a.title.localeCompare(b.title,'ko')):rows;}
 function renderCategory(){
   makeNavigation();const c=categories[state.category];$('title').textContent=c[0];$('breadcrumb').textContent='ARCHIVE / '+c[1];$('description').textContent=c[2];$('total').textContent=(counts[state.category]||0).toLocaleString()+'개 자료';
   if(buildingView(!catalog.length))return;
   if(state.category==='buildings'){$('title').textContent='이전 재질 기록';$('description').textContent='원작 건물에 새 재질을 적용해 보았던 초기 작업입니다.';}
   $('search').value=state.q;$('chapter').value=state.chapter;$('status-filter').value=state.status;
   for(const id of ['status-filter','status-label'])$(id).hidden=state.collection!=='remake';for(const id of ['chapter','chapter-label'])$(id).hidden=state.collection==='remake';
-  const groups=[...new Set(catalog.filter(x=>x.collection===state.collection&&(state.category==='work'&&!state.item||x.kind===state.category)).map(x=>x.group).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
+  const groups=[...new Set(catalog.filter(x=>x.collection===state.collection&&inCategory(x)).map(x=>x.group).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
   $('group').replaceChildren(new Option('전체',''),...groups.map(g=>new Option(g,g)));$('group').value=state.group;
   $('chapter').disabled=!['maps','models','terrain'].includes(state.category);
   $('browse-title').textContent=$('title').textContent+' 둘러보기';renderCards();
   const selected=byId.get(state.item);
   document.querySelector('.inspect').hidden=!selected;
-  if(selected?.kind===state.category)selectItem(selected.id,false);
+  if(selected&&inCategory(selected))selectItem(selected.id,false);
   else {requestToken++;viewer.clear();current=null;}
 }
 function renderCards(){
   observer?.disconnect();resetThumbnails();homeGallery?.clear();homeGallery=null;
   const allWork=state.category==='work'&&!state.item;
+  const characterView=state.category==='characters',sectioned=allWork||characterView;
   const list=filtered();
   const remake=state.collection==='remake',cards=$('cards'),pager=$('more-results').parentElement;
   cards.replaceChildren();cards.classList.toggle('review-list',remake);
@@ -184,9 +199,9 @@ function renderCards(){
   },{rootMargin:'260px'});
   if(!list.length){cards.innerHTML='<p class="empty">일치하는 자료가 없습니다.</p>';return;}
   if(remake){
-    const groups=allWork?collections.remake.filter(kind=>list.some(r=>r.kind===kind)):[...new Set(list.map(r=>r.group))];
+    const groups=sectioned?(characterView?['art','expressions','characterwork','work']:collections.remake).filter(kind=>list.some(r=>r.kind===kind)):[...new Set(list.map(r=>r.group))];
     for(const group of groups){
-      const rows=list.filter(row=>(allWork?row.kind:row.group)===group);
+      const rows=list.filter(row=>(sectioned?row.kind:row.group)===group);
       if(allWork&&group==='buildings'&&!state.q&&!state.group&&!state.status){
         const section=document.createElement('section');section.className='review-section';
         const title=document.createElement('h2');title.textContent='마을 건물 · 원작과 목표 원화';
@@ -194,7 +209,7 @@ function renderCards(){
         homeGallery=createComparison(galleryRoot,{onChoose:()=>{}});
         homeGallery.show('ragnie-buildings');
       }
-      reviewGroup(allWork&&group==='buildings'?'건물 재질 연구':allWork?categories[group][0]:group||categories[state.category][0],rows,cards);
+      reviewGroup(characterView&&group==='work'?'Arcturus NPC':allWork&&group==='buildings'?'건물 재질 연구':sectioned?categories[group][0]:group||categories[state.category][0],rows,cards);
     }
     return;
   }
@@ -315,7 +330,7 @@ window.addEventListener('hashchange',readRoute);
 async function refreshLibrary(){
   const button=$('refresh-library');button.disabled=true;button.textContent='자료 확인 중…';
   detailsCache.clear();
-  try{const data=await readJson('/api/catalog');catalog=data.items;counts=data.counts;byId=new Map(catalog.map(x=>[x.id,x]));current=null;gallery?.clear();readRoute();connectionState(true);
+  try{const data=await readJson('/api/catalog');catalog=data.items;counts={...data.counts,characters:catalog.filter(row=>row.collection==='remake'&&(['art','expressions','characterwork'].includes(row.kind)||row.kind==='work'&&row.group==='Arcturus NPC')).length};byId=new Map(catalog.map(x=>[x.id,x]));current=null;gallery?.clear();readRoute();connectionState(true);
     $('catalog-updated').textContent=new Date(data.updated).toLocaleDateString('ko-KR');$('catalog-updated').dateTime=data.updated;
     document.querySelector('.connection').textContent=data.contributionErrors.length?`기록 ${data.contributionErrors.length}개 확인 필요`:'최신 기록 연결됨';
   }catch(e){requestToken++;catalog=[];counts={};byId.clear();current=null;observer?.disconnect();resetThumbnails();viewer.clear();
