@@ -12,7 +12,7 @@ const categories={
   portraits:['캐릭터와 표정','PORTRAITS','원작 초상과 새 표정 원화를 나란히 비교하세요.','M16 7a4 4 0 11-8 0 4 4 0 018 0M4 21v-3a8 8 0 0116 0v3'],
   actors:['3D 액터','3D ACTORS','원작 3D 캐릭터의 초기 자세와 전체 프레임 자료입니다.','M12 2l9 5v10l-9 5-9-5V7zm0 10v10m-9-15l9 5 9-5'],
   sprites:['스프라이트','SPRITES','캐릭터, 몬스터, 이펙트와 UI의 이미지 프레임을 탐색하세요.','M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z'],
-  characters:['캐릭터','CHARACTERS','주인공과 NPC의 원화·제작 자료와 원작 역할·등장 근거를 함께 봅니다. 제작 순위는 제안입니다.','M16 7a4 4 0 11-8 0 4 4 0 018 0M4 21v-3a8 8 0 0116 0v3'],
+  characters:['캐릭터','CHARACTERS','캐릭터별 원화·표정·3D 제작을 한 묶음으로 봅니다. 인물 설명과 제작 순위 제안은 한 번만 표시합니다.','M16 7a4 4 0 11-8 0 4 4 0 018 0M4 21v-3a8 8 0 0116 0v3'],
   art:['원화 비교','CONCEPT ART','같은 인물을 새롭게 해석한 원작과 리메이크 원화입니다.','M3 4h18v16H3zm0 12l6-6 5 5 3-3 4 4M16 7h1'],
   docs:['개발 자료','DEVELOPMENT','장별 흐름, 이벤트, 데이터와 재현 근거를 읽어보세요.','M4 3h12l4 4v14H4zm11 0v5h5M8 12h8M8 16h8'],
   work:['작업 한눈에','WORK IN PROGRESS','원화, 배역, 모델과 제작 과정을 한곳에서 비교합니다.','M4 4h16v16H4zm4 4h8M8 12h8M8 16h5'],
@@ -45,12 +45,14 @@ function mediaFigure(file,caption){
   const label=escape(caption||file.caption||file.name);
   return `<figure><a href="${escape(file.url)}" target="_blank" rel="noopener"><img loading="lazy" decoding="async" crossorigin="anonymous" src="${escape(file.url)}" alt="${label}"></a><figcaption>${label}</figcaption></figure>`;
 }
-function reviewCard(row){
+function reviewCard(row,nested=false){
   const card=document.createElement('article');
   card.className='review-card';card.dataset.id=row.id;
   const inCharacters=state.category==='characters';
   const url='#'+new URLSearchParams({collection:row.collection,category:inCharacters?'characters':row.kind,item:row.id,...(state.q?{q:state.q}:{}),...(state.group?{group:state.group}:{}),...(state.status?{status:state.status}:{})});
-  card.innerHTML=`<header><small>${escape(row.group||categories[row.kind][0])}${row.status?' · '+escape(statusNames[row.status]||row.status):''}</small><h3>${escape(row.title)}</h3></header><div class="review-media" aria-busy="true"></div><p class="review-summary">${escape(row.subtitle)}</p><a class="review-source" href="${url}" target="_blank" rel="noopener">상세·원본 파일 ↗</a>`;
+  const heading=nested?'h4':'h3',expression=row.kind==='expressions';
+  const title=expression&&row.title.includes(' · ')?row.title.split(' · ').slice(1).join(' · '):row.title;
+  card.innerHTML=`<header><small>${escape(expression?'표정':row.group||categories[row.kind][0])}${row.status?' · '+escape(statusNames[row.status]||row.status):''}</small><${heading}>${escape(title)}</${heading}></header><div class="review-media" aria-busy="true"></div><p class="review-summary">${escape(row.subtitle)}</p><a class="review-source" href="${url}" target="_blank" rel="noopener">${expression?'표정 원본·파일':'상세·원본 파일'} ↗</a>`;
   if(inCharacters){
     const source=card.querySelector('.review-source');source.removeAttribute('target');
     source.onclick=event=>{
@@ -70,7 +72,13 @@ async function fillReview(card){
     const pics=item.images?.length?item.images:item.image?[item.image]:[];
     const summary=card.querySelector('.review-summary');
     summary.textContent=item.summary||item.subtitle;
-    if(item.characterProfile){
+    const character=card.closest('.character-group');
+    if(character&&item.characterProfile){
+      character.querySelector('.character-heading').textContent=item.characterProfile.name;
+      const overview=character.querySelector('.character-overview');
+      if(!overview.childElementCount)overview.innerHTML=characterMarkup(item.characterProfile,false);
+      summary.hidden=summary.textContent===item.characterProfile.description;
+    }else if(item.characterProfile&&item.kind!=='expressions'){
       const context=document.createElement('div');context.innerHTML=characterMarkup(item.characterProfile);
       summary.after(context);summary.hidden=summary.textContent===item.characterProfile.description;
     }
@@ -100,13 +108,34 @@ async function fillReview(card){
 }
 const chapterNames={prologue:'서장','chapter-1':'1장','chapter-2':'2장','chapter-3':'3장',finale:'종장'};
 const appearanceNames={appearance:'등장',conditional:'조건부',flashback:'회상',dream:'몽환',mention:'언급',transition:'장 전환'};
-function characterMarkup(profile){
+function characterMarkup(profile,showName=true){
   const first=profile.firstVerified;
   const firstLabel=first?chapterNames[first.chapter]+' · '+appearanceNames[first.mode]:'장 확인 중';
   const appearances=profile.appearances.map(p=>`<span class="chapter-chip">${escape(p.chapter?chapterNames[p.chapter]:'장 확인 중')} · ${escape(appearanceNames[p.mode]||p.mode)}</span>`).join('');
   const unresolved=profile.unverifiedChapters?.length?'추가 확인할 장 · '+profile.unverifiedChapters.map(x=>chapterNames[x]).join(' · '):'';
   const sources=profile.evidence.map(e=>`<li><p>${e.url?`<a href="${escape(e.url)}" target="_blank" rel="noopener">${escape(e.source)} · ${escape(e.location)}</a>`:`${escape(e.source)} · ${escape(e.location)}`}</p><p>${escape(e.purpose)}</p>${e.frame!=null?`<small>프레임 ${escape(e.frame)} · 채널 ${escape(e.channel)}${e.actor?` · 배우 ${escape(e.actor)}`:""}</small>`:""}<blockquote>${escape(e.excerpt)}</blockquote>${e.chapterAnchor?`<small>장 연결 · ${escape(e.chapterAnchor.owner)} / ${escape(e.chapterAnchor.source)}${e.chapterAnchor.line?' L'+escape(e.chapterAnchor.line):''}</small>`:''}</li>`).join('');
-  return `<section class="character-context" aria-label="${escape(profile.name)} 원작과 제작 정보"><p class="character-name"><strong>${escape(profile.name)}</strong><small>${profile.kind==='replacement'?'범용 대체 후보':profile.kind==='unmapped'?'인물 대응 확인 중':'원작 인물'}</small></p><p>${escape(profile.description)}</p>${profile.identityNote?`<p class="identity-note">${escape(profile.identityNote)}</p>`:''}<dl><dt>조사 내 첫 장</dt><dd>${profile.kind==='replacement'?'원작 배역 미확정':escape(firstLabel)}</dd><dt>등장 근거</dt><dd><div class="chapter-chips">${appearances||'장별 대응 확인 중'}</div>${unresolved?`<p class="profile-pending">${escape(unresolved)}</p>`:''}</dd><dt>서사 비중 평가</dt><dd><b>${escape(profile.importance.label)}</b><p>${escape(profile.importance.reason)}</p></dd><dt>제작 제안</dt><dd><b>${escape(profile.priority.rank)}</b><p>${escape(profile.priority.reason)}</p></dd></dl>${profile.pendingReason?`<p class="profile-pending">${escape(profile.pendingReason)}</p>`:''}<details class="character-sources"><summary>원작·배역 근거 ${profile.evidence.length}건</summary><p>${escape(profile.verificationNote||'원작 배역 후보와 모델 대응 기록입니다.')}</p><ul>${sources}</ul></details></section>`;
+  return `<section class="character-context" aria-label="${escape(profile.name)} 원작과 제작 정보">${showName?`<p class="character-name"><strong>${escape(profile.name)}</strong><small>${profile.kind==='replacement'?'범용 대체 후보':profile.kind==='unmapped'?'인물 대응 확인 중':'원작 인물'}</small></p>`:''}<p>${escape(profile.description)}</p>${profile.identityNote?`<p class="identity-note">${escape(profile.identityNote)}</p>`:''}<dl><dt>조사 내 첫 장</dt><dd>${profile.kind==='replacement'?'원작 배역 미확정':escape(firstLabel)}</dd><dt>등장 근거</dt><dd><div class="chapter-chips">${appearances||'장별 대응 확인 중'}</div>${unresolved?`<p class="profile-pending">${escape(unresolved)}</p>`:''}</dd><dt>서사 비중 평가</dt><dd><b>${escape(profile.importance.label)}</b><p>${escape(profile.importance.reason)}</p></dd><dt>제작 제안</dt><dd><b>${escape(profile.priority.rank)}</b><p>${escape(profile.priority.reason)}</p></dd></dl>${profile.pendingReason?`<p class="profile-pending">${escape(profile.pendingReason)}</p>`:''}<details class="character-sources"><summary>원작·배역 근거 ${profile.evidence.length}건</summary><p>${escape(profile.verificationNote||'원작 배역 후보와 모델 대응 기록입니다.')}</p><ul>${sources}</ul></details></section>`;
+}
+function reviewCharacters(rows,parent){
+  const characters=new Map();
+  for(const row of rows){const id=row.characterId||row.id;if(!characters.has(id))characters.set(id,[]);characters.get(id).push(row);}
+  for(const [id,materials] of characters){
+    const section=document.createElement('section');section.className='character-group review-section';section.dataset.character=id;
+    const heading=document.createElement('h2');heading.className='character-heading';heading.textContent=materials[0].title;
+    const count=document.createElement('p');count.className='character-material-count';count.textContent=(materials[0].profileKind==='replacement'?'범용 대체 후보':materials[0].profileKind==='original'?'원작 인물':'인물 대응 확인 중')+' · 자료 '+materials.length+'건';
+    const overview=document.createElement('div');overview.className='character-overview';
+    section.append(heading,count);
+    for(const kind of ['art','work','expressions','characterwork']){
+      const children=materials.filter(row=>row.kind===kind);if(!children.length)continue;
+      const block=document.createElement('section');block.className='character-materials';
+      const title=document.createElement('h3');title.textContent=({art:'캐릭터 원화',work:'원화·작업 기록',expressions:'표정',characterwork:'3D 제작·배역 자료'})[kind]+' · '+children.length;
+      const grid=document.createElement('div');grid.className='review-grid';grid.append(...children.map(row=>reviewCard(row,true)));
+      block.append(title,grid);section.append(block);
+      if(!overview.parentElement)section.append(overview);
+    }
+    parent.append(section);
+  }
+  return characters.size;
 }
 function reviewGroup(title,rows,parent){
   const section=document.createElement('section');section.className='review-section';
@@ -164,12 +193,13 @@ function readRoute(){const p=new URLSearchParams(location.hash.slice(1));if(p.ha
   }
 }
 function makeNavigation(){
-  $('categories').innerHTML=collections[state.collection].filter(key=>!['art','expressions','characterwork'].includes(key)).map(key=>{const c=categories[key];return `<button class="nav-button" data-category="${key}" aria-current="${(key===state.category||key==='characters'&&['art','expressions','characterwork'].includes(state.category))?'page':'false'}">${icon(c[3],'nav-icon')}<span>${c[0]}</span>${key==='buildings'?'':`<span class="count">${(counts[key]||0).toLocaleString()}</span>`}</button>`;}).join('');
+  $('categories').innerHTML=collections[state.collection].filter(key=>!['art','expressions','characterwork'].includes(key)).map(key=>{const c=categories[key],count=key==='characters'?new Set(catalog.filter(x=>x.collection==='remake'&&isCharacter(x)).map(x=>x.characterId||x.id)).size:counts[key]||0;return `<button class="nav-button" data-category="${key}" aria-current="${(key===state.category||key==='characters'&&['art','expressions','characterwork'].includes(state.category))?'page':'false'}">${icon(c[3],'nav-icon')}<span>${c[0]}</span>${key==='buildings'?'':`<span class="count">${count.toLocaleString()}</span>`}</button>`;}).join('');
   $('categories').querySelectorAll('button').forEach(button=>button.onclick=()=>{state={collection:state.collection,category:button.dataset.category,status:'',q:'',group:'',chapter:'',page:1,item:''};urlState();});
   document.querySelectorAll('[data-collection]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.collection===state.collection)));
 }
+function isCharacter(row){return ['art','expressions','characterwork'].includes(row.kind)||row.kind==='work'&&row.group==='Arcturus NPC';}
 function inCategory(row){
-  if(state.category==='characters')return ['art','expressions','characterwork'].includes(row.kind)||row.kind==='work'&&row.group==='Arcturus NPC';
+  if(state.category==='characters')return isCharacter(row);
   return state.category==='work'&&!state.item||row.kind===state.category;
 }
 function filtered(){const words=state.q.toLowerCase().trim().split(/\s+/).filter(Boolean);const rows=catalog.filter(x=>x.collection===state.collection&&inCategory(x)&&(!state.group||x.group===state.group)&&(!state.chapter||x.chapters.includes(state.chapter))&&(!state.status||x.status===state.status)&&words.every(w=>x.search.includes(w)));return state.collection==='remake'?rows.sort((a,b)=>b.date.localeCompare(a.date)||a.title.localeCompare(b.title,'ko')):rows;}
@@ -214,9 +244,17 @@ function renderCards(){
   },{rootMargin:'260px'});
   if(!list.length){cards.innerHTML='<p class="empty">일치하는 자료가 없습니다.</p>';return;}
   if(remake){
-    const groups=sectioned?(characterView?['art','expressions','characterwork','work']:collections.remake).filter(kind=>list.some(r=>r.kind===kind)):[...new Set(list.map(r=>r.group))];
+    if(['characters','art','expressions','characterwork'].includes(state.category)){
+      const people=reviewCharacters(list,cards);
+      $('result-count').textContent=`${people}명 · 자료 ${list.length}건`;
+      return;
+    }
+    const groups=sectioned?collections.remake.filter(kind=>list.some(r=>r.kind===kind)):[...new Set(list.map(r=>r.group))];
+    const characterRows=allWork?list.filter(isCharacter):[];let charactersShown=false;
     for(const group of groups){
-      const rows=list.filter(row=>(sectioned?row.kind:row.group)===group);
+      if(characterRows.length&&!charactersShown&&['work','art','expressions','characterwork'].includes(group)){reviewCharacters(characterRows,cards);charactersShown=true;}
+      const rows=list.filter(row=>(sectioned?row.kind:row.group)===group&&(!allWork||!isCharacter(row)));
+      if(!rows.length)continue;
       if(allWork&&group==='buildings'&&!state.q&&!state.group&&!state.status){
         const section=document.createElement('section');section.className='review-section';
         const title=document.createElement('h2');title.textContent='마을 건물 · 원작과 목표 원화';
@@ -224,7 +262,7 @@ function renderCards(){
         homeGallery=createComparison(galleryRoot,{onChoose:()=>{}});
         homeGallery.show('ragnie-buildings');
       }
-      reviewGroup(characterView&&group==='work'?'Arcturus NPC':allWork&&group==='buildings'?'건물 재질 연구':sectioned?categories[group][0]:group||categories[state.category][0],rows,cards);
+      reviewGroup(allWork&&group==='buildings'?'건물 재질 연구':sectioned?categories[group][0]:group||categories[state.category][0],rows,cards);
     }
     return;
   }
@@ -275,7 +313,7 @@ async function selectItem(id,updateRoute=true){
 }
 function showDetails(item){
   $('character-context').hidden=!item.characterProfile;
-  $('character-context').innerHTML=item.characterProfile?characterMarkup(item.characterProfile):'';
+  $('character-context').innerHTML=item.characterProfile?(item.kind==='expressions'?`<p>${escape(item.characterProfile.name)}의 표정 자료</p>`:characterMarkup(item.characterProfile)):'';
   $('detail-kind').textContent=categories[item.kind]?.[1]||'DOCUMENT';$('detail-title').textContent=item.title;$('detail-subtitle').textContent=item.subtitle;
   $('detail-state').innerHTML=item.status?`<span class="status-dot ${item.status}">${escape(statusNames[item.status])}</span><time>${escape(item.date)}</time>`:'';$('detail-summary').textContent=item.summary!==item.subtitle?item.summary||'':'';
   $('stats').innerHTML=Object.entries(item.stats||{}).filter(([,v])=>v!==null).map(([k,v])=>`<dt>${escape(k)}</dt><dd>${escape(Array.isArray(v)?v.join(' × '):v)}</dd>`).join('');
