@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile, cp } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root=dirname(fileURLToPath(import.meta.url)),out=resolve(root,'pages-dist');
-const files=['index.html','style.css','icon.svg','app.js','viewer.js','data-source.js','target-comparison.html','target-comparison.js','target-comparison.css','town-assets.html','town-assets.js','town-assets.css'];
+const files=['index.html','style.css','icon.svg','app.js','viewer.js','data-source.js','crafted-work.js','target-comparison.html','target-comparison.js','target-comparison.css','town-assets.html','town-assets.js','town-assets.css'];
 await mkdir(out,{recursive:true});
 for(const name of files){
   let content=await readFile(resolve(root,'web',name),'utf8');
