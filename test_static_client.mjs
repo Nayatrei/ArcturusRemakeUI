@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { craftedWork } from './web/crafted-work.js';
 const element=()=>({dataset:{},setAttribute(){},addEventListener(){},append(){},after(){},querySelector(){return {};}});
 globalThis.location=new URL('https://nayatrei.github.io/ArcturusRemakeUI/');
 globalThis.document={querySelector:()=>element(),createElement:element,querySelectorAll:()=>[],getElementById:()=>null};
@@ -35,4 +36,31 @@ test('build allowlist excludes private metadata and login; paths support Pages s
   for(const name of ['index.html','target-comparison.html','town-assets.html']){
     const html=await readFile('web/'+name,'utf8');assert.doesNotMatch(html,/(?:src|href)="\/(?!\/)/);assert.doesNotMatch(html,/":"\/vendor/);
   }
+});
+test('crafted cards show all directly linked artwork without duplicating their original images',async()=>{
+  const item={id:'asset',kind:'crafted',images:[{id:'original'}],related:['art']};
+  const work={id:'art',status:'concept',related:['asset'],images:[{id:'original'},...['A','B','C','D'].map(id=>({id,caption:id}))]};
+  const byId=new Map([['asset',item],['art',{id:'art',kind:'work',status:'concept'}]]);
+  const result=await craftedWork(item,byId,async()=>work);
+  assert.deepEqual(result.records[0].images.map(image=>image.id),['A','B','C','D']);
+  assert.equal(result.records[0].work.status,'concept');
+  assert.equal(work.images.length,5);assert.equal(item.images.length,1);
+});
+test('shared audits, archived candidates and non-work backlinks do not become an asset target',async()=>{
+  const item={id:'asset',kind:'crafted',images:[],related:['audit','archive','model','stale']};
+  const byId=new Map([['asset',item],['other',{kind:'crafted'}],['audit',{id:'audit',kind:'work'}],['archive',{id:'archive',kind:'work',status:'archive'}],['model',{id:'model',kind:'models'}],['stale',{id:'stale',kind:'work',status:'concept'}]]);
+  const calls=[];
+  const result=await craftedWork(item,byId,async id=>{calls.push(id);return {status:id==='stale'?'archive':'review',related:['asset','other'],images:[{id:'image'}]};});
+  assert.deepEqual(calls,['audit','stale']);assert.deepEqual(result,{records:[],failed:[]});
+});
+test('one failed linked record keeps the other artwork visible and reports the missing preview',async()=>{
+  const item={id:'asset',kind:'crafted',image:{url:'/original'},related:['missing','ready']};
+  const byId=new Map([['asset',item],['missing',{id:'missing',kind:'work',title:'Missing art'}],['ready',{id:'ready',kind:'work'}]]);
+  const result=await craftedWork(item,byId,async id=>{if(id==='missing')throw new TypeError('Offline');return {id,related:['asset'],images:[{url:'/original'},{url:'/target'}]};});
+  assert.deepEqual(result.failed,['Missing art']);assert.deepEqual(result.records[0].images,[{url:'/target'}]);
+});
+test('work records are not recursively expanded and the Pages build includes the new UI module',async()=>{
+  const result=await craftedWork({kind:'work',related:['source']},new Map(),()=>{throw new Error('Must not fetch');});
+  assert.deepEqual(result,{records:[],failed:[]});
+  assert.ok((await readFile('build-pages.mjs','utf8')).includes("'crafted-work.js'"));
 });

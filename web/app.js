@@ -3,6 +3,7 @@ import { marked } from './vendor/marked/lib/marked.esm.js';
 import DOMPurify from './vendor/dompurify/dist/purify.es.mjs';
 import { readJson, sourceUrl, localFilesOnly, connectionState } from './data-source.js';
 import { createComparison } from './target-comparison.js';
+import { craftedWork } from './crafted-work.js';
 
 const $=id=>document.getElementById(id);
 const categories={
@@ -103,8 +104,26 @@ async function fillReview(card){
       }
     }
     media.hidden=!media.childElementCount;
+    if(item.kind==='crafted')await showCraftedWork(card,item);
   }catch{if(card.isConnected)media.textContent='미리보기를 읽지 못했습니다. 상세에서 다시 확인하세요.';}
   media.setAttribute('aria-busy','false');
+}
+async function showCraftedWork(card,item){
+  const {records,failed}=await craftedWork(item,byId,fetchItem);
+  if(!card.isConnected||!records.length&&!failed.length)return;
+  const section=document.createElement('section');section.className='crafted-work';
+  const heading=document.createElement('h4');heading.textContent='새 원화와 제작 결과';section.append(heading);
+  for(const {work,images} of records){
+    const article=document.createElement('article');article.className='crafted-work-record';
+    const status=document.createElement('small');status.textContent=statusNames[work.status]||work.status||'등록된 작업';
+    const title=document.createElement('h5');title.textContent=work.title;
+    const gallery=document.createElement('div');gallery.className='review-media';gallery.innerHTML=images.map(file=>mediaFigure(file,file.caption||work.title)).join('');
+    const link=document.createElement('a');link.className='review-source';link.textContent='작업 기록·파일 ↗';
+    link.href='#'+new URLSearchParams({collection:'remake',category:'work',item:work.id,...(state.q?{q:state.q}:{}),...(state.group?{group:state.group}:{}),...(state.status?{status:state.status}:{})});
+    link.target='_blank';link.rel='noopener';article.append(status,title,gallery,link);section.append(article);
+  }
+  if(failed.length){const message=document.createElement('p');message.className='review-summary';message.textContent='일부 연결 원화를 읽지 못했습니다. 자료 새로고침으로 다시 확인하세요.';section.append(message);}
+  card.querySelector('.review-media').before(section);
 }
 const chapterNames={prologue:'서장','chapter-1':'1장','chapter-2':'2장','chapter-3':'3장',finale:'종장'};
 const appearanceNames={appearance:'등장',conditional:'조건부',flashback:'회상',dream:'몽환',mention:'언급',transition:'장 전환'};
@@ -140,7 +159,7 @@ function reviewCharacters(rows,parent){
 function reviewGroup(title,rows,parent){
   const section=document.createElement('section');section.className='review-section';
   const heading=document.createElement('h2');heading.textContent=title+' · '+rows.length;
-  const grid=document.createElement('div');grid.className='review-grid';grid.append(...rows.map(reviewCard));
+  const grid=document.createElement('div');grid.className='review-grid';grid.append(...rows.map(row=>reviewCard(row)));
   section.append(heading,grid);parent.append(section);
 }
 function showLinked(item,rows){
