@@ -31,6 +31,7 @@ const categories={
   characterwork:['캐릭터 3D 제작','CHARACTER PRODUCTION','HQ/SQ 버전별 원화·중간 모델·편집 소스와 납품 파일을 확인하세요.','M16 7a4 4 0 11-8 0 4 4 0 018 0M4 21v-3a8 8 0 0116 0v3']
 };
 const collections={original:['maps','models','terrain','portraits','creatures','actors','sprites','docs'],remake:['work','characters','worlds','rooms','stages','crafted','art','expressions','characterwork','terrainwork','buildings','records']};
+const navigation=[...new Set(['work','characters','creatures',...collections.remake,...collections.original])].filter(key=>!['art','expressions','characterwork'].includes(key));
 const statusNames={active:'진행 중 · 기록 기준',verified:'단계 검증 완료',concept:'원화 제작',review:'검토·후속 작업',archive:'이전 작업 기록'};
 const icon=(path,cls='')=>`<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" aria-hidden="true"><path d="${path}"/></svg>`;
 let catalog=[],byId=new Map(),counts={},state={collection:'remake',category:'work',status:'',q:'',group:'',chapter:'',page:1,item:''};
@@ -308,9 +309,17 @@ function readRoute(){const p=new URLSearchParams(location.hash.slice(1));if(p.ha
   }
 }
 function makeNavigation(){
-  $('categories').innerHTML=collections[state.collection].filter(key=>!['art','expressions','characterwork'].includes(key)).map(key=>{const c=categories[key],count=key==='characters'?new Set(catalog.filter(x=>x.collection==='remake'&&isCharacter(x)).map(x=>x.characterId||x.id)).size:counts[key]||0;return `<button class="nav-button" data-category="${key}" aria-current="${(key===state.category||key==='characters'&&['art','expressions','characterwork'].includes(state.category))?'page':'false'}">${icon(c[3],'nav-icon')}<span>${c[0]}</span>${key==='buildings'?'':`<span class="count">${count.toLocaleString()}</span>`}</button>`;}).join('');
-  $('categories').querySelectorAll('button').forEach(button=>button.onclick=()=>{state={collection:state.collection,category:button.dataset.category,status:'',q:'',group:'',chapter:'',page:1,item:''};urlState();});
-  document.querySelectorAll('[data-collection]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.collection===state.collection)));
+  const nav=$('categories');
+  if(!nav.firstElementChild)nav.innerHTML='<ul class="navigation-list">'+navigation.map(key=>{
+    const c=categories[key],collection=collections.original.includes(key)?'original':'remake';
+    return `<li><a class="nav-button" data-category="${key}" href="#collection=${collection}&amp;category=${key}">${icon(c[3],'nav-icon')}<span>${c[0]}</span>${key==='buildings'?'':'<span class="count"></span>'}</a></li>`;
+  }).join('')+'</ul>';
+  nav.querySelectorAll('a').forEach(link=>{
+    const key=link.dataset.category;
+    link.setAttribute('aria-current',(key===state.category||key==='characters'&&['art','expressions','characterwork'].includes(state.category))?'page':'false');
+    const count=link.querySelector('.count');
+    if(count)count.textContent=(key==='characters'?new Set(catalog.filter(x=>x.collection==='remake'&&isCharacter(x)).map(x=>x.characterId||x.id)).size:counts[key]||0).toLocaleString();
+  });
 }
 function isCharacter(row){return ['art','expressions','characterwork'].includes(row.kind)||row.kind==='work'&&row.group==='Arcturus NPC';}
 function inCategory(row){
@@ -322,7 +331,7 @@ function browseGroup(row){return state.category==='stages'?row.stageGroup||row.g
 function browseStatus(row){return state.category==='crafted'&&row.kind==='crafted'?(row.productionStatus||'concept'):row.status;}
 function filtered(){const words=state.q.toLowerCase().trim().split(/\s+/).filter(Boolean);const rows=catalog.filter(x=>x.collection===state.collection&&inCategory(x)&&(!state.group||browseGroup(x)===state.group)&&(!state.chapter||x.chapters.includes(state.chapter))&&(!state.status||browseStatus(x)===state.status)&&words.every(w=>x.search.includes(w)));return state.collection==='remake'?rows.sort((a,b)=>b.date.localeCompare(a.date)||a.title.localeCompare(b.title,'ko')):rows;}
 function renderCategory(){
-  makeNavigation();const c=categories[state.category];$('title').textContent=c[0];$('breadcrumb').textContent='ARCHIVE / '+c[1];$('description').textContent=c[2];$('total').textContent=(counts[state.category]||0).toLocaleString()+'개 자료';
+  makeNavigation();const c=categories[state.category];$('title').textContent=c[0];$('breadcrumb').textContent=(state.collection==='original'?'원작 자료':'리메이크 작업')+' / '+c[1];$('description').textContent=c[2];$('total').textContent=(counts[state.category]||0).toLocaleString()+'개 자료';
   if(buildingView(!catalog.length))return;
   if(state.category==='buildings'){$('title').textContent='이전 재질 기록';$('description').textContent='원작 건물에 새 재질을 적용해 보았던 초기 작업입니다.';}
   $('search').value=state.q;$('chapter').value=state.chapter;$('status-filter').value=state.status;
@@ -501,7 +510,6 @@ async function openDocument(id){
 function filtersChanged(){state.q=$('search').value;state.group=$('group').value;state.chapter=state.collection==='original'||state.category==='characters'?$('chapter').value:'';state.status=state.collection==='remake'?$('status-filter').value:'';state.page=1;state.item='';urlState(true);renderCategory();}
 $('search').oninput=()=>{clearTimeout(filterTimer);filterTimer=setTimeout(filtersChanged,200);};$('group').onchange=filtersChanged;$('chapter').onchange=filtersChanged;
 $('status-filter').onchange=filtersChanged;
-document.querySelectorAll('[data-collection]').forEach(b=>b.onclick=()=>{const collection=b.dataset.collection;state={collection,category:collections[collection][0],status:'',q:'',group:'',chapter:'',page:1,item:''};urlState();});
 $('clear').onclick=()=>{state.q='';state.group='';state.chapter='';state.status='';state.page=1;state.item='';urlState(true);renderCategory();};
 $('orbit').onclick=()=>{viewer.view(false);$('orbit').setAttribute('aria-pressed','true');$('top').setAttribute('aria-pressed','false');};
 $('top').onclick=()=>{viewer.view(true);$('top').setAttribute('aria-pressed','true');$('orbit').setAttribute('aria-pressed','false');};$('reset').onclick=()=>viewer.view(false);$('material').onchange=()=>viewer.setMaterial($('material').value);
