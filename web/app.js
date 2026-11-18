@@ -4,6 +4,7 @@ import DOMPurify from './vendor/dompurify/dist/purify.es.mjs';
 import { readJson, sourceUrl, localFilesOnly, connectionState } from './data-source.js';
 import { createComparison } from './target-comparison.js';
 import { craftedWork } from './crafted-work.js';
+import { attachArtworkChoices, resetArtworkSelections } from './artwork-selection.js';
 
 const $=id=>document.getElementById(id);
 const categories={
@@ -104,6 +105,7 @@ async function fillReview(card){
       }
     }
     media.hidden=!media.childElementCount;
+    if(item.kind==='work')attachArtworkChoices(media,item,pics);
     if(item.kind==='crafted')await showCraftedWork(card,item);
   }catch{if(card.isConnected)media.textContent='미리보기를 읽지 못했습니다. 상세에서 다시 확인하세요.';}
   media.setAttribute('aria-busy','false');
@@ -121,6 +123,7 @@ async function showCraftedWork(card,item){
     const link=document.createElement('a');link.className='review-source';link.textContent='작업 기록·파일 ↗';
     link.href='#'+new URLSearchParams({collection:'remake',category:'work',item:work.id,...(state.q?{q:state.q}:{}),...(state.group?{group:state.group}:{}),...(state.status?{status:state.status}:{})});
     link.target='_blank';link.rel='noopener';article.append(status,title,gallery,link);section.append(article);
+    attachArtworkChoices(gallery,work,images);
   }
   if(failed.length){const message=document.createElement('p');message.className='review-summary';message.textContent='일부 연결 원화를 읽지 못했습니다. 자료 새로고침으로 다시 확인하세요.';section.append(message);}
   card.querySelector('.review-media').before(section);
@@ -405,6 +408,7 @@ window.addEventListener('hashchange',readRoute);
 async function refreshLibrary(){
   const button=$('refresh-library');button.disabled=true;button.textContent='자료 확인 중…';
   detailsCache.clear();
+  resetArtworkSelections();
   try{const data=await readJson('/api/catalog');catalog=data.items;counts={...data.counts,characters:catalog.filter(row=>row.collection==='remake'&&(['art','expressions','characterwork'].includes(row.kind)||row.kind==='work'&&row.group==='Arcturus NPC')).length};byId=new Map(catalog.map(x=>[x.id,x]));current=null;gallery?.clear();readRoute();connectionState(true);
     $('catalog-updated').textContent=new Date(data.updated).toLocaleDateString('ko-KR');$('catalog-updated').dateTime=data.updated;
     document.querySelector('.connection').textContent=data.contributionErrors.length?`기록 ${data.contributionErrors.length}개 확인 필요`:'최신 기록 연결됨';
