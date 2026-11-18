@@ -5,6 +5,7 @@ import { readJson, sourceUrl, localFilesOnly, connectionState } from './data-sou
 import { createComparison } from './target-comparison.js';
 import { craftedWork } from './crafted-work.js';
 import { attachArtworkChoices, resetArtworkSelections } from './artwork-selection.js';
+import { attachModelFeedback } from './model-feedback.js';
 
 const $=id=>document.getElementById(id);
 const categories={
@@ -106,6 +107,7 @@ async function fillReview(card){
     }
     media.hidden=!media.childElementCount;
     if(item.kind==='work')attachArtworkChoices(media,item,pics);
+    attachModelFeedback(card,item);
     if(item.kind==='crafted')await showCraftedWork(card,item);
   }catch{if(card.isConnected)media.textContent='미리보기를 읽지 못했습니다. 상세에서 다시 확인하세요.';}
   media.setAttribute('aria-busy','false');
@@ -124,6 +126,7 @@ async function showCraftedWork(card,item){
     link.href='#'+new URLSearchParams({collection:'remake',category:'work',item:work.id,...(state.q?{q:state.q}:{}),...(state.group?{group:state.group}:{}),...(state.status?{status:state.status}:{})});
     link.target='_blank';link.rel='noopener';article.append(status,title,gallery,link);section.append(article);
     attachArtworkChoices(gallery,work,images);
+    attachModelFeedback(article,work);
   }
   if(failed.length){const message=document.createElement('p');message.className='review-summary';message.textContent='일부 연결 원화를 읽지 못했습니다. 자료 새로고침으로 다시 확인하세요.';section.append(message);}
   card.querySelector('.review-media').before(section);
@@ -340,6 +343,7 @@ function showDetails(item){
   $('detail-state').innerHTML=item.status?`<span class="status-dot ${item.status}">${escape(statusNames[item.status])}</span><time>${escape(item.date)}</time>`:'';$('detail-summary').textContent=item.summary!==item.subtitle?item.summary||'':'';
   $('stats').innerHTML=Object.entries(item.stats||{}).filter(([,v])=>v!==null).map(([k,v])=>`<dt>${escape(k)}</dt><dd>${escape(Array.isArray(v)?v.join(' × '):v)}</dd>`).join('');
   $('notes').innerHTML=(item.notes||[]).map(n=>`<p class="note">${escape(n)}</p>`).join('');
+  attachModelFeedback($('notes'),item);
   const links=(item.files||[]).map(f=>`<a class="file-link" href="${f.url}?download=1" title="${escape(f.path)}"><b class="format">${escape(f.format)}</b><span>${escape(f.name)}</span><small>${size(f.bytes)} ↓</small></a>`);
   $('files').innerHTML=`<div class="files-title"><span>관련 파일</span><span>${links.length}</span></div>${links.slice(0,5).join('')}${links.length>5?`<details><summary>파일 ${links.length-5}개 더 보기</summary>${links.slice(5).join('')}</details>`:''}`;
   const related=(item.related||[]).map(id=>byId.get(id)).filter(Boolean);
@@ -358,7 +362,7 @@ function showImages(images){
 }
 function showRemakeMedia(item){
   const pictures=item.images.length?item.images:[{...item.image,caption:'결과 이미지'}];
-  const views=[...(item.pair&&pictures.length>1?[{id:'pair',label:'원작 / 리메이크'}]:[]),...pictures.map((f,i)=>({id:String(i),label:f.caption})),...(item.model?[{id:'3d',label:'3D 모델'}]:[])];
+  const views=[...(item.pair&&pictures.length>1?[{id:'pair',label:item.modelReviewRevision?'제작 원화 / 3D':'원작 / 리메이크'}]:[]),...pictures.map((f,i)=>({id:String(i),label:f.caption})),...(item.model?[{id:'3d',label:'3D 모델'}]:[])];
   $('asset-views').hidden=views.length<2;$('asset-views').innerHTML=views.map(v=>`<button data-view="${v.id}" aria-pressed="false">${escape(v.label)}</button>`).join('');
   const change=async id=>{viewer.clear();$('viewer-controls').hidden=id!=='3d';$('full-image').hidden=id==='3d';$('preview-status').textContent='';
     $('asset-views').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===id)));
