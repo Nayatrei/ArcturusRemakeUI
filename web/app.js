@@ -3,8 +3,8 @@ import { marked } from './vendor/marked/lib/marked.esm.js';
 import DOMPurify from './vendor/dompurify/dist/purify.es.mjs';
 import { readJson, sourceUrl, localFilesOnly, connectionState } from './data-source.js';
 import { createComparison } from './target-comparison.js';
-import { craftedWork } from './crafted-work.js';
-import { attachArtworkChoices, resetArtworkSelections } from './artwork-selection.js';
+import { craftedWork, comparisonViews, inPropCategory } from './crafted-work.js';
+import { attachArtworkChoices, resetArtworkSelections, sourceArtwork } from './artwork-selection.js';
 import { attachModelFeedback } from './model-feedback.js';
 
 const $=id=>document.getElementById(id);
@@ -52,10 +52,11 @@ function reviewCard(row,nested=false){
   const card=document.createElement('article');
   card.className='review-card';card.dataset.id=row.id;
   const inCharacters=state.category==='characters';
-  const url='#'+new URLSearchParams({collection:row.collection,category:inCharacters?'characters':row.kind,item:row.id,...(state.q?{q:state.q}:{}),...(state.group?{group:state.group}:{}),...(state.status?{status:state.status}:{})});
+  const category=inCharacters?'characters':['stages','crafted'].includes(state.category)&&inPropCategory(row,state.category)?state.category:row.kind;
+  const url='#'+new URLSearchParams({collection:row.collection,category,item:row.id,...(state.q?{q:state.q}:{}),...(state.group?{group:state.group}:{}),...(state.status?{status:state.status}:{})});
   const heading=nested?'h4':'h3',expression=row.kind==='expressions';
-  const title=expression&&row.title.includes(' · ')?row.title.split(' · ').slice(1).join(' · '):row.title;
-  card.innerHTML=`<header><small>${escape(expression?'표정':row.group||categories[row.kind][0])}${row.status?' · '+escape(statusNames[row.status]||row.status):''}</small><${heading}>${escape(title)}</${heading}></header><div class="review-media" aria-busy="true"></div><p class="review-summary">${escape(row.subtitle)}</p><a class="review-source" href="${url}" target="_blank" rel="noopener">${expression?'표정 원본·파일':'상세·원본 파일'} ↗</a>`;
+  const title=expression&&row.title.includes(' · ')?row.title.split(' · ').slice(1).join(' · '):row.productionTitle||row.title;
+  card.innerHTML=`<header><small>${escape(expression?'표정':row.group||categories[row.kind][0])}${row.status?' · '+escape(statusNames[browseStatus(row)]||row.status):''}</small><${heading}>${escape(title)}</${heading}></header><div class="review-media" aria-busy="true"></div><p class="review-summary">${escape(row.subtitle)}</p><a class="review-source" href="${url}" target="_blank" rel="noopener">${expression?'표정 원본·파일':'상세·원본 파일'} ↗</a>`;
   if(inCharacters){
     const source=card.querySelector('.review-source');source.removeAttribute('target');
     source.onclick=event=>{
@@ -64,7 +65,7 @@ function reviewCard(row,nested=false){
       state.item=row.id;urlState();$('main').scrollIntoView({block:'start'});
     };
   }
-  if(detailsCache.has(row.id))fillReview(card);else observer.observe(card);
+  observer.observe(card);
   return card;
 }
 async function fillReview(card){
@@ -75,6 +76,10 @@ async function fillReview(card){
     const pics=item.images?.length?item.images:item.image?[item.image]:[];
     const summary=card.querySelector('.review-summary');
     summary.textContent=item.summary||item.subtitle;
+    if(item.kind==='crafted'||((state.category==='stages'||state.category==='crafted')&&item.productionViews)){
+      await showPropReview(card,item);
+      return;
+    }
     const character=card.closest('.character-group');
     if(character&&item.characterProfile){
       character.querySelector('.character-heading').textContent=item.characterProfile.name;
@@ -100,7 +105,8 @@ async function fillReview(card){
       fit.innerHTML='<summary>배역별 배색·제작 메모</summary>'+item.notes.filter(note=>!note.startsWith('RGBA 설계안')).map(note=>`<p>${escape(note)}</p>`).join('');
       summary.after(fit);
     }else{
-      media.innerHTML=pics.map(f=>mediaFigure(f,f.caption||item.title)).join('');
+      const preview=item.kind==='stages'?pics.slice(0,1):pics;
+      media.innerHTML=preview.map(f=>mediaFigure(f,f.caption||item.title)).join('');
       if(!pics.length&&item.model){
         const label=document.createElement('small');label.textContent=item.model.format.toUpperCase()+' 모델 · 등록된 이미지 없음';media.append(label);
       }
@@ -108,28 +114,111 @@ async function fillReview(card){
     media.hidden=!media.childElementCount;
     if(item.kind==='work')attachArtworkChoices(media,item,pics);
     attachModelFeedback(card,item);
-    if(item.kind==='crafted')await showCraftedWork(card,item);
   }catch{if(card.isConnected)media.textContent='미리보기를 읽지 못했습니다. 상세에서 다시 확인하세요.';}
-  media.setAttribute('aria-busy','false');
+  finally{media.setAttribute('aria-busy','false');}
 }
-async function showCraftedWork(card,item){
-  const {records,failed}=await craftedWork(item,byId,fetchItem);
-  if(!card.isConnected||!records.length&&!failed.length)return;
-  const section=document.createElement('section');section.className='crafted-work';
-  const heading=document.createElement('h4');heading.textContent='새 원화와 제작 결과';section.append(heading);
-  for(const {work,images} of records){
-    const article=document.createElement('article');article.className='crafted-work-record';
-    const status=document.createElement('small');status.textContent=statusNames[work.status]||work.status||'등록된 작업';
-    const title=document.createElement('h5');title.textContent=work.title;
-    const gallery=document.createElement('div');gallery.className='review-media';gallery.innerHTML=images.map(file=>mediaFigure(file,file.caption||work.title)).join('');
-    const link=document.createElement('a');link.className='review-source';link.textContent='작업 기록·파일 ↗';
-    link.href='#'+new URLSearchParams({collection:'remake',category:'work',item:work.id,...(state.q?{q:state.q}:{}),...(state.group?{group:state.group}:{}),...(state.status?{status:state.status}:{})});
-    link.target='_blank';link.rel='noopener';article.append(status,title,gallery,link);section.append(article);
-    attachArtworkChoices(gallery,work,images);
-    attachModelFeedback(article,work);
+function labeledSelect(labelText,options){
+  const label=document.createElement('label'),select=document.createElement('select');
+  label.append(labelText,select);
+  for(const [value,text] of options)select.add(new Option(text,value));
+  return {label,select};
+}
+function productionLink(work){
+  const link=document.createElement('a');
+  link.className='review-source';link.textContent='제작 파일·기록 ↗';
+  link.href='#'+new URLSearchParams({collection:'remake',category:work.kind,item:work.id});
+  link.target='_blank';link.rel='noopener';return link;
+}
+function showComparison(card,views){
+  const media=card.querySelector('.review-media'),summary=card.querySelector('.review-summary');
+  const controls=document.createElement('div');controls.className='prop-controls';media.before(controls);
+  const version=labeledSelect('제작본',views.map((v,i)=>[String(i),v.label]));
+  if(views.length>1)controls.append(version.label);
+  const reference=labeledSelect('비교 대상',[]);
+  controls.append(reference.label);
+  const captionNode=document.createElement('span');summary.replaceChildren(captionNode);
+  let activeWork,link,feedback;
+  function paint(){
+    const view=views[Number(version.select.value)];
+    const ref=view[reference.select.value];
+    media.innerHTML=mediaFigure(view.result,view.result.caption||view.label)+(ref?mediaFigure(ref,reference.select.selectedOptions[0].text):'');
   }
-  if(failed.length){const message=document.createElement('p');message.className='review-summary';message.textContent='일부 연결 원화를 읽지 못했습니다. 자료 새로고침으로 다시 확인하세요.';section.append(message);}
-  card.querySelector('.review-media').before(section);
+  function selectVersion(){
+    const view=views[Number(version.select.value)],work=view.work,previous=reference.select.value;
+    const pairs=[['art','제작 원화'],['original','게임 원본']].filter(([key])=>view[key]);
+    reference.select.replaceChildren(...pairs.map(([key,label])=>new Option(label,key)));
+    if(pairs.some(([key])=>key===previous))reference.select.value=previous;
+    reference.label.hidden=pairs.length<2;
+    if(work!==activeWork){
+      activeWork=work;
+      card.querySelector('header small').textContent=work.stageGroup+' · '+(statusNames[work.status]||work.status);
+      if(card.dataset.id!==work.id)card.querySelector('header :is(h3,h4)').textContent=work.title;
+      captionNode.textContent=work.productionLabel;
+      link?.remove();link=productionLink(work);
+      if(card.dataset.id!==work.id)summary.append(' ',link);
+      feedback?.remove();feedback=null;
+      if(work.modelReviewRevision){feedback=document.createElement('div');summary.after(feedback);attachModelFeedback(feedback,work);}
+    }
+    paint();
+  }
+  version.select.onchange=selectVersion;reference.select.onchange=paint;selectVersion();
+}
+async function addPropChoices(card,item,hasResult){
+  const media=card.querySelector('.review-media'),original=item.images?.[0]||item.image;
+  let choices;
+  try{choices=await sourceArtwork(item.id);}catch{
+    const notice=document.createElement('p');notice.textContent='원화 선택 정보를 읽지 못했습니다. 자료 새로고침으로 다시 확인하세요.';card.append(notice);return;
+  }
+  if(!card.isConnected)return;
+  if(!choices.length&&!hasResult){
+    const {records}=await craftedWork(item,byId,fetchItem);
+    if(!card.isConnected)return;
+    // Older signed-off references sometimes predate the choice registry.
+    const confirmed=records.flatMap(r=>r.images).filter(f=>/사용자 (확정|승인|선택)/.test(f.caption));
+    if(confirmed.length===1&&confirmed[0].id!==original?.id)media.insertAdjacentHTML('beforeend',mediaFigure(confirmed[0],confirmed[0].caption));
+  }
+  for(const choice of choices){
+    let work;
+    try{work=await fetchItem(choice.workId);}catch{
+      const notice=document.createElement('p');notice.textContent='원화 후보를 읽지 못했습니다. 자료 새로고침으로 다시 확인하세요.';card.append(notice);continue;
+    }
+    if(!card.isConnected)return;
+    const panel=document.createElement('details'),toggle=document.createElement('summary');
+    panel.className='prop-choices';panel.dataset.choiceSource=work.id;panel.append(toggle);card.append(panel);
+    const files=work.images.filter(f=>choice.options?.some(option=>option.imageId===f.id));
+    function update(state){
+      const selected=state.selectionValid&&state.selection;
+      toggle.textContent=state.skipped?'진행 안 함 · 다시 검토':selected?selected.label+' 선택됨 · 원화 변경':'원화 후보 보기·선택';
+      if(hasResult)return;
+      const selectedFile=selected&&files.find(f=>f.id===selected.imageId);
+      const shared=selectedFile&&state.options.filter(o=>o.imageId===selectedFile.id).length>1;
+      media.innerHTML=(original?mediaFigure(original,'게임 원본'):'')+(selectedFile?mediaFigure(selectedFile,(shared?'원화 시트 · ':'선택 원화 · ')+selected.label):'');
+      card.querySelector('header small').textContent=state.skipped?'진행 안 함':selected?'원화 선택됨':'원화 선택 대기';
+    }
+    update(choice);panel.addEventListener('choice-updated',event=>update(event.detail));
+    panel.addEventListener('toggle',()=>{
+      if(!panel.open||panel.querySelector('.review-media'))return;
+      const gallery=document.createElement('div');gallery.className='review-media';
+      gallery.innerHTML=files.map(f=>mediaFigure(f,f.caption)).join('');panel.append(gallery);
+      attachArtworkChoices(gallery,work,files);
+    });
+  }
+}
+async function showPropReview(card,item){
+  const media=card.querySelector('.review-media');
+  const records=item.productionViews?[{status:'fulfilled',value:item}]:await Promise.allSettled((item.productionIds||[]).map(fetchItem));
+  if(!card.isConnected)return;
+  const views=comparisonViews(records.filter(r=>r.status==='fulfilled').map(r=>r.value));
+  if(views.length)showComparison(card,views);
+  else{
+    const original=item.images?.[0]||item.image;
+    if(original)media.innerHTML=mediaFigure(original,'게임 원본');
+    card.querySelector('.review-summary').textContent=item.subtitle;
+  }
+  if(records.some(r=>r.status==='rejected')){
+    const message=document.createElement('p');message.textContent='일부 제작본을 읽지 못했습니다. 자료 새로고침으로 다시 확인하세요.';card.append(message);
+  }
+  if(item.kind==='crafted'&&!item.productionViews)await addPropChoices(card,item,views.length>0);
 }
 const chapterNames={prologue:'서장','chapter-1':'1장','chapter-2':'2장','chapter-3':'3장',finale:'종장'};
 const appearanceNames={appearance:'등장',conditional:'조건부',flashback:'회상',dream:'몽환',mention:'언급',transition:'장 전환'};
@@ -225,9 +314,12 @@ function makeNavigation(){
 function isCharacter(row){return ['art','expressions','characterwork'].includes(row.kind)||row.kind==='work'&&row.group==='Arcturus NPC';}
 function inCategory(row){
   if(state.category==='characters')return isCharacter(row);
+  if(state.category==='crafted'||state.category==='stages')return inPropCategory(row,state.category);
   return state.category==='work'&&!state.item||row.kind===state.category;
 }
-function filtered(){const words=state.q.toLowerCase().trim().split(/\s+/).filter(Boolean);const rows=catalog.filter(x=>x.collection===state.collection&&inCategory(x)&&(!state.group||x.group===state.group)&&(!state.chapter||x.chapters.includes(state.chapter))&&(!state.status||x.status===state.status)&&words.every(w=>x.search.includes(w)));return state.collection==='remake'?rows.sort((a,b)=>b.date.localeCompare(a.date)||a.title.localeCompare(b.title,'ko')):rows;}
+function browseGroup(row){return state.category==='stages'?row.stageGroup||row.group:state.category==='crafted'&&row.standaloneModel?'독립 제작 모델':row.group;}
+function browseStatus(row){return state.category==='crafted'&&row.kind==='crafted'?(row.productionStatus||'concept'):row.status;}
+function filtered(){const words=state.q.toLowerCase().trim().split(/\s+/).filter(Boolean);const rows=catalog.filter(x=>x.collection===state.collection&&inCategory(x)&&(!state.group||browseGroup(x)===state.group)&&(!state.chapter||x.chapters.includes(state.chapter))&&(!state.status||browseStatus(x)===state.status)&&words.every(w=>x.search.includes(w)));return state.collection==='remake'?rows.sort((a,b)=>b.date.localeCompare(a.date)||a.title.localeCompare(b.title,'ko')):rows;}
 function renderCategory(){
   makeNavigation();const c=categories[state.category];$('title').textContent=c[0];$('breadcrumb').textContent='ARCHIVE / '+c[1];$('description').textContent=c[2];$('total').textContent=(counts[state.category]||0).toLocaleString()+'개 자료';
   if(buildingView(!catalog.length))return;
@@ -235,7 +327,7 @@ function renderCategory(){
   $('search').value=state.q;$('chapter').value=state.chapter;$('status-filter').value=state.status;
   for(const id of ['status-filter','status-label'])$(id).hidden=state.collection!=='remake';for(const id of ['chapter','chapter-label'])$(id).hidden=state.collection==='remake'&&state.category!=='characters';
   $('chapter-label').textContent=state.category==='characters'?'등장 장 근거':'장별 근거';
-  const groups=[...new Set(catalog.filter(x=>x.collection===state.collection&&inCategory(x)).map(x=>x.group).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
+  const groups=[...new Set(catalog.filter(x=>x.collection===state.collection&&inCategory(x)).map(browseGroup).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
   $('group').replaceChildren(new Option('전체',''),...groups.map(g=>new Option(g,g)));$('group').value=state.group;
   $('chapter').disabled=!['maps','models','terrain','characters'].includes(state.category);
   $('browse-title').textContent=$('title').textContent+' 둘러보기';renderCards();
@@ -269,16 +361,25 @@ function renderCards(){
   },{rootMargin:'260px'});
   if(!list.length){cards.innerHTML='<p class="empty">일치하는 자료가 없습니다.</p>';return;}
   if(remake){
+    if(state.category==='crafted'){
+      const built=row=>row.productionStatus||row.standaloneModel||row.stageGroup;
+      const sections=[['제작본',list.filter(built)],['원화·원본',list.filter(row=>!built(row))]];
+      for(const [title,rows] of sections){
+        rows.sort((a,b)=>(a.productionTitle||a.title).localeCompare(b.productionTitle||b.title,'ko',{numeric:true}));
+        if(rows.length)reviewGroup(title,rows,cards);
+      }
+      return;
+    }
     if(['characters','art','expressions','characterwork'].includes(state.category)){
       const people=reviewCharacters(list,cards);
       $('result-count').textContent=`${people}명 · 자료 ${list.length}건`;
       return;
     }
-    const groups=sectioned?collections.remake.filter(kind=>list.some(r=>r.kind===kind)):[...new Set(list.map(r=>r.group))];
+    const groups=sectioned?collections.remake.filter(kind=>list.some(r=>r.kind===kind)):[...new Set(list.map(browseGroup))];
     const characterRows=allWork?list.filter(isCharacter):[];let charactersShown=false;
     for(const group of groups){
       if(characterRows.length&&!charactersShown&&['work','art','expressions','characterwork'].includes(group)){reviewCharacters(characterRows,cards);charactersShown=true;}
-      const rows=list.filter(row=>(sectioned?row.kind:row.group)===group&&(!allWork||!isCharacter(row)));
+      const rows=list.filter(row=>(sectioned?row.kind:browseGroup(row))===group&&(!allWork||!isCharacter(row)));
       if(!rows.length)continue;
       if(allWork&&group==='buildings'&&!state.q&&!state.group&&!state.status){
         const section=document.createElement('section');section.className='review-section';
