@@ -6,6 +6,9 @@ async function registry(){
   if(!registryPromise)registryPromise=readJson('/api/artwork-selections').catch(error=>{registryPromise=undefined;throw error;});
   return registryPromise;
 }
+export async function sourceArtwork(sourceId){
+  return Object.values((await registry()).works).filter(work=>work.sourceId===sourceId);
+}
 function paint(gallery,state,message='',busy=false){
   const row=gallery.previousElementSibling;
   const selected=state.selectionValid&&state.selection;
@@ -23,6 +26,7 @@ function paint(gallery,state,message='',busy=false){
 }
 function repaint(workId,state,message='',busy=false){
   for(const gallery of document.querySelectorAll('[data-artwork-work]'))if(gallery.dataset.artworkWork===workId)paint(gallery,state,message,busy);
+  if(!busy)for(const panel of document.querySelectorAll('[data-choice-source]'))if(panel.dataset.choiceSource===workId)panel.dispatchEvent(new CustomEvent('choice-updated',{detail:state}));
 }
 async function save(workId,imageId,optionKey=null,action=imageId?'select':'clear'){
   const data=await registry(),state=data.works[workId];

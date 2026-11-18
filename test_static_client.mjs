@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { craftedWork } from './web/crafted-work.js';
+import { craftedWork, comparisonViews, inPropCategory } from './web/crafted-work.js';
 const element=()=>({dataset:{},setAttribute(){},addEventListener(){},append(){},after(){},querySelector(){return {};}});
 globalThis.location=new URL('https://nayatrei.github.io/ArcturusRemakeUI/');
 globalThis.document={querySelector:()=>element(),createElement:element,querySelectorAll:()=>[],getElementById:()=>null};
@@ -63,4 +63,26 @@ test('work records are not recursively expanded and the Pages build includes the
   const result=await craftedWork({kind:'work',related:['source']},new Map(),()=>{throw new Error('Must not fetch');});
   assert.deepEqual(result,{records:[],failed:[]});
   assert.ok((await readFile('build-pages.mjs','utf8')).includes("'crafted-work.js'"));
+});
+
+test('stage membership includes registered production without turning original atlas records into new output',()=>{
+  const source={kind:'crafted'},work={kind:'work',stageGroup:'Mesh review'},legacy={kind:'stages'};
+  assert.equal(inPropCategory(source,'stages'),false);
+  assert.equal(inPropCategory(work,'stages'),true);
+  assert.equal(inPropCategory(legacy,'stages'),true);
+  assert.equal(inPropCategory({kind:'work'},'stages'),false);
+  assert.equal(inPropCategory(source,'crafted'),true);
+  assert.equal(inPropCategory(work,'crafted'),false);
+  assert.equal(inPropCategory({...work,standaloneModel:true},'crafted'),true);
+  assert.equal(inPropCategory({...source,productionSource:'source'},'crafted'),false);
+});
+test('comparisons use registered result and build reference, preserving the producing record for feedback',()=>{
+  const result={url:'/files/result'},art={url:'/files/used'},original={url:'/files/original'};
+  const work={id:'review',productionViews:[{label:'First',result,art,original},{label:'Second',result:{url:'/files/second'},original}],
+    images:[{url:'/files/old-board'},{url:'/files/rear'}]};
+  const shown=comparisonViews([{images:work.images},work,{productionViews:[{result:{}}]}]);
+  assert.equal(shown.length,2);
+  assert.deepEqual(shown.map(x=>x.result.url),['/files/result','/files/second']);
+  assert.equal(shown[0].art,art);assert.equal(shown[0].original,original);assert.equal(shown[0].work.id,work.id);
+  assert.equal(shown[1].art,undefined);
 });

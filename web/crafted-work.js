@@ -1,4 +1,14 @@
-// Only one directly linked asset's work belongs inside its source card.
+export function inPropCategory(row,category){
+  if(category==='stages')return row.kind==='stages'||Boolean(row.stageGroup);
+  return (row.kind==='crafted'&&!row.productionSource)||Boolean(row.standaloneModel);
+}
+
+export function comparisonViews(records){
+  return records.flatMap(work=>(work.productionViews||[]).filter(view=>view.result?.url)
+    .map(view=>({work,...view})));
+}
+
+// Return only evidence linked to a single source when browsing unfinished artwork.
 export async function craftedWork(item,byId,fetchItem){
   if(item.kind!=='crafted')return {records:[],failed:[]};
   const rows=(item.related||[]).map(id=>byId.get(id)).filter(row=>row?.kind==='work'&&row.status!=='archive');
