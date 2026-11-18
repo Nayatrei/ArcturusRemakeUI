@@ -14,6 +14,7 @@ const categories={
   terrain:['지형과 높이','TERRAIN','지형, 높이, 텍스처와 원본 격자를 함께 살펴보세요.','M2 20L9 5l4 8 3-5 6 12zm5-11l2 2 2-2'],
   portraits:['캐릭터와 표정','PORTRAITS','원작 초상과 새 표정 원화를 나란히 비교하세요.','M16 7a4 4 0 11-8 0 4 4 0 018 0M4 21v-3a8 8 0 0116 0v3'],
   actors:['3D 액터','3D ACTORS','원작 3D 캐릭터의 초기 자세와 전체 프레임 자료입니다.','M12 2l9 5v10l-9 5-9-5V7zm0 10v10m-9-15l9 5 9-5'],
+  creatures:['크리처','CREATURES','동물·필드 몬스터·비인간형 크리처의 원본 파일과 이미지 프레임·3D 자료를 확인하세요.','M12 2l9 5v10l-9 5-9-5V7zm0 10v10m-9-15l9 5 9-5'],
   sprites:['스프라이트','SPRITES','캐릭터, 몬스터, 이펙트와 UI의 이미지 프레임을 탐색하세요.','M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z'],
   characters:['캐릭터','CHARACTERS','캐릭터별 원화·표정·3D 제작을 한 묶음으로 봅니다. 인물 설명과 제작 순위 제안은 한 번만 표시합니다.','M16 7a4 4 0 11-8 0 4 4 0 018 0M4 21v-3a8 8 0 0116 0v3'],
   art:['원화 비교','CONCEPT ART','같은 인물을 새롭게 해석한 원작과 리메이크 원화입니다.','M3 4h18v16H3zm0 12l6-6 5 5 3-3 4 4M16 7h1'],
@@ -29,7 +30,7 @@ const categories={
   records:['개발·제작 일지','WORK RECORDS','당시 상태와 실제 검증 범위를 날짜별로 남긴 기록입니다.','M4 3h12l4 4v14H4zm11 0v5h5M8 12h8M8 16h8'],
   characterwork:['캐릭터 3D 제작','CHARACTER PRODUCTION','HQ/SQ 버전별 원화·중간 모델·편집 소스와 납품 파일을 확인하세요.','M16 7a4 4 0 11-8 0 4 4 0 018 0M4 21v-3a8 8 0 0116 0v3']
 };
-const collections={original:['maps','models','terrain','portraits','actors','sprites','docs'],remake:['work','characters','worlds','rooms','stages','crafted','art','expressions','characterwork','terrainwork','buildings','records']};
+const collections={original:['maps','models','terrain','portraits','creatures','actors','sprites','docs'],remake:['work','characters','worlds','rooms','stages','crafted','art','expressions','characterwork','terrainwork','buildings','records']};
 const statusNames={active:'진행 중 · 기록 기준',verified:'단계 검증 완료',concept:'원화 제작',review:'검토·후속 작업',archive:'이전 작업 기록'};
 const icon=(path,cls='')=>`<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" aria-hidden="true"><path d="${path}"/></svg>`;
 let catalog=[],byId=new Map(),counts={},state={collection:'remake',category:'work',status:'',q:'',group:'',chapter:'',page:1,item:''};
