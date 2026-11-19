@@ -332,6 +332,7 @@ function browseStatus(row){return state.category==='crafted'&&row.kind==='crafte
 function filtered(){const words=state.q.toLowerCase().trim().split(/\s+/).filter(Boolean);const rows=catalog.filter(x=>x.collection===state.collection&&inCategory(x)&&(!state.group||browseGroup(x)===state.group)&&(!state.chapter||x.chapters.includes(state.chapter))&&(!state.status||browseStatus(x)===state.status)&&words.every(w=>x.search.includes(w)));return state.collection==='remake'?rows.sort((a,b)=>b.date.localeCompare(a.date)||a.title.localeCompare(b.title,'ko')):rows;}
 function renderCategory(){
   makeNavigation();const c=categories[state.category];$('title').textContent=c[0];$('breadcrumb').textContent=(state.collection==='original'?'원작 자료':'리메이크 작업')+' / '+c[1];$('description').textContent=c[2];$('total').textContent=(counts[state.category]||0).toLocaleString()+'개 자료';
+  $('character-reference')?.toggleAttribute('hidden',state.category!=='characters');
   if(buildingView(!catalog.length))return;
   if(state.category==='buildings'){$('title').textContent='이전 재질 기록';$('description').textContent='원작 건물에 새 재질을 적용해 보았던 초기 작업입니다.';}
   $('search').value=state.q;$('chapter').value=state.chapter;$('status-filter').value=state.status;
